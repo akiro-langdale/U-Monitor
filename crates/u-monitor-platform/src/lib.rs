@@ -1,11 +1,12 @@
-//! Platform adapters for system identity, CPU discovery and RAM statistics.
+//! Platform adapters for system identity, CPU, RAM and mounted volumes.
 mod cpu;
 mod ram;
+mod storage;
 
 use std::time::SystemTime;
 use u_monitor_core::{
     Architecture, Availability, CpuInfo, DataSource, Measurement, OperatingSystem, PlatformAdapter,
-    PlatformFeature, PlatformResult, RamInfo, SystemIdentity,
+    PlatformFeature, PlatformResult, RamInfo, StorageVolume, SystemIdentity,
 };
 
 /// Adapter for metadata describing the currently executing binary.
@@ -13,6 +14,10 @@ use u_monitor_core::{
 pub struct NativePlatformAdapter;
 
 impl PlatformAdapter for NativePlatformAdapter {
+    fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
+        storage::discover()
+    }
+
     fn ram_info(&self) -> PlatformResult<RamInfo> {
         ram::discover()
     }
@@ -40,7 +45,9 @@ impl PlatformAdapter for NativePlatformAdapter {
     fn check_availability(&self, feature: PlatformFeature) -> Availability {
         match feature {
             PlatformFeature::SystemIdentity => Availability::Supported,
-            PlatformFeature::CpuDiscovery | PlatformFeature::RamMetrics => {
+            PlatformFeature::CpuDiscovery
+            | PlatformFeature::RamMetrics
+            | PlatformFeature::StorageDiscovery => {
                 if sysinfo::IS_SUPPORTED_SYSTEM {
                     Availability::Supported
                 } else {

@@ -2,10 +2,12 @@
 
 mod cpu;
 mod ram;
+mod storage;
 mod system;
 
 pub use cpu::CpuInfo;
 pub use ram::RamInfo;
+pub use storage::{StorageKind, StorageVolume, VolumeSpace};
 
 pub use system::{Architecture, OperatingSystem, SystemIdentity};
 
@@ -117,12 +119,18 @@ pub enum PlatformFeature {
     CpuDiscovery,
     CpuMetrics,
     RamMetrics,
+    StorageDiscovery,
     DiskStorage,
     HardwareRegisters,
 }
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Enumerates mounted volumes visible to the backend, not all physical disks.
+    fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
+        PlatformResult::NotImplemented("Mounted-volume discovery is not implemented".into())
+    }
+
     /// Returns one RAM statistics snapshot without reading physical memory bytes.
     fn ram_info(&self) -> PlatformResult<RamInfo> {
         PlatformResult::NotImplemented("RAM statistics are not implemented".into())

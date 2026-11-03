@@ -17,4 +17,4 @@ edition = "2024"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 thiserror = "1.0"
 
-sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
+sysinfo = { version = "=0.37.2", default-features = false, features = ["system", "disk"] }
