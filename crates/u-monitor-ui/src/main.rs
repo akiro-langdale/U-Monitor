@@ -33,9 +33,10 @@ fn main() {
     }
     print_cpu(&adapter);
     print_ram(&adapter);
+    print_storage(&adapter);
     for (label, feature) in [
         ("CPU load/frequency", PlatformFeature::CpuMetrics),
-        ("Storage", PlatformFeature::DiskStorage),
+        ("Storage I/O/raw blocks", PlatformFeature::DiskStorage),
         ("Registers", PlatformFeature::HardwareRegisters),
     ] {
         println!("{label}: {}", adapter.check_availability(feature));
@@ -145,6 +146,52 @@ fn format_bytes(bytes: &u64) -> String {
         "{bytes} bytes (~{:.2} GiB)",
         *bytes as f64 / 1_073_741_824.0
     )
+}
+
+fn print_storage(adapter: &impl PlatformAdapter) {
+    let result = adapter.storage_volumes();
+    println!("Mounted-volume discovery: {}", result.availability());
+    match result {
+        PlatformResult::Success(snapshot) => {
+            println!(
+                "Reported volumes: {} [source={}, captured_at={}]",
+                snapshot.value.len(),
+                source_label(snapshot.source),
+                snapshot.timestamp.to_rfc3339()
+            );
+            println!("This is not a physical-device inventory; do not sum volume capacities.");
+            println!(
+                "Linux tmpfs and network mounts are excluded by the current backend features."
+            );
+            for volume in snapshot.value {
+                // Debug formatting escapes native paths instead of silently replacing invalid UTF-8.
+                println!("Mount point: {:?}", volume.mount_point);
+                print_field_with("Volume name", volume.name, |text| format!("{text:?}"));
+                print_field_with("File system", volume.file_system, |text| {
+                    format!("{text:?}")
+                });
+                println!("Media type (backend-reported): {}", volume.kind);
+                print_field_with("Total volume space", volume.space.total_bytes, format_bytes);
+                print_field_with(
+                    "Available volume space",
+                    volume.space.available_bytes,
+                    format_bytes,
+                );
+                print_field_with(
+                    "Used/unavailable (total - available)",
+                    volume.space.used_bytes,
+                    format_bytes,
+                );
+            }
+            println!("Used/unavailable space may include reserved space and quota restrictions.");
+        }
+        PlatformResult::PermissionRequired(reason) => {
+            eprintln!("Storage permission required: {reason}")
+        }
+        PlatformResult::Unavailable(reason) => eprintln!("Storage unavailable: {reason}"),
+        PlatformResult::NotImplemented(reason) => eprintln!("Storage not implemented: {reason}"),
+        PlatformResult::Error(error) => eprintln!("Storage discovery failed: {error}"),
+    }
 }
 
 #[cfg(test)]
