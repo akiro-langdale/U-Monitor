@@ -1,5 +1,6 @@
 use u_monitor_core::{DataSource, PlatformAdapter, PlatformFeature, PlatformResult};
 use u_monitor_platform::NativePlatformAdapter;
+use u_monitor_telemetry::TelemetryCollector;
 
 fn main() {
     let adapter = NativePlatformAdapter;
@@ -32,7 +33,7 @@ fn main() {
         PlatformResult::Error(error) => eprintln!("System identification failed: {error}"),
     }
     print_cpu(&adapter);
-    print_ram(&adapter);
+    print_ram_telemetry();
     print_storage(&adapter);
     for (label, feature) in [
         ("CPU load/frequency", PlatformFeature::CpuMetrics),
@@ -107,8 +108,31 @@ fn source_label(source: DataSource) -> &'static str {
     }
 }
 
-fn print_ram(adapter: &impl PlatformAdapter) {
-    let result = adapter.ram_info();
+fn print_ram_telemetry() {
+    // Explicit retention policy for this single-snapshot console demonstration.
+    let mut collector = match TelemetryCollector::new(NativePlatformAdapter, 60) {
+        Ok(collector) => collector,
+        Err(error) => {
+            eprintln!("Telemetry configuration failed: {error}");
+            return;
+        }
+    };
+    match collector.sample() {
+        Ok(snapshot) => {
+            println!(
+                "Telemetry snapshot #{}: captured_at={}, elapsed={:?}, history={}/{}",
+                snapshot.sequence,
+                snapshot.captured_at.to_rfc3339(),
+                snapshot.elapsed,
+                collector.history().len(),
+                collector.capacity(),
+            );
+            print_ram(snapshot.ram);
+        }
+        Err(error) => eprintln!("Telemetry collection failed: {error}"),
+    }
+}
+fn print_ram(result: PlatformResult<u_monitor_core::RamInfo>) {
     println!("RAM statistics: {}", result.availability());
     match result {
         PlatformResult::Success(snapshot) => {
