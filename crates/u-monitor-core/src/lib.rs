@@ -1,5 +1,9 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
+mod system;
+
+pub use system::{Architecture, OperatingSystem, SystemIdentity};
+
 use chrono::{DateTime, Utc};
 use std::fmt;
 use thiserror::Error;
@@ -104,6 +108,7 @@ impl<T> PlatformResult<T> {
 /// Per enumeration of platform subsystems or functions, the availability of which can be checked
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformFeature {
+    SystemIdentity,
     CpuMetrics,
     RamMetrics,
     DiskStorage,
@@ -112,6 +117,11 @@ pub enum PlatformFeature {
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Returns build-target metadata, not physical hardware characteristics.
+    fn system_identity(&self) -> PlatformResult<SystemIdentity> {
+        PlatformResult::NotImplemented("System identification is not implemented".into())
+    }
+
     /// Returns the name of the current adapter (for example, "Linux Native", "Windows API")
     fn name(&self) -> &'static str;
 
