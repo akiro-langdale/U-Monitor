@@ -5,3 +5,4 @@ edition.workspace = true
 
 [dependencies]
 u-monitor-core = { path = "../u-monitor-core" }
+sysinfo = { workspace = true }

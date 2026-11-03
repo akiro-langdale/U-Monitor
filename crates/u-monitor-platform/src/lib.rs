@@ -1,7 +1,9 @@
-//! Platform adapters. Hardware discovery is not implemented yet.
+//! Platform adapters for system identity and CPU discovery.
+mod cpu;
+
 use std::time::SystemTime;
 use u_monitor_core::{
-    Architecture, Availability, DataSource, Measurement, OperatingSystem, PlatformAdapter,
+    Architecture, Availability, CpuInfo, DataSource, Measurement, OperatingSystem, PlatformAdapter,
     PlatformFeature, PlatformResult, SystemIdentity,
 };
 
@@ -10,6 +12,10 @@ use u_monitor_core::{
 pub struct NativePlatformAdapter;
 
 impl PlatformAdapter for NativePlatformAdapter {
+    fn cpu_info(&self) -> PlatformResult<CpuInfo> {
+        cpu::discover()
+    }
+
     fn name(&self) -> &'static str {
         "Native Platform Adapter"
     }
@@ -29,6 +35,13 @@ impl PlatformAdapter for NativePlatformAdapter {
     fn check_availability(&self, feature: PlatformFeature) -> Availability {
         match feature {
             PlatformFeature::SystemIdentity => Availability::Supported,
+            PlatformFeature::CpuDiscovery => {
+                if sysinfo::IS_SUPPORTED_SYSTEM {
+                    Availability::Supported
+                } else {
+                    Availability::Unavailable
+                }
+            }
             PlatformFeature::CpuMetrics
             | PlatformFeature::RamMetrics
             | PlatformFeature::DiskStorage
