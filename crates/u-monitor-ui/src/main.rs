@@ -32,9 +32,9 @@ fn main() {
         PlatformResult::Error(error) => eprintln!("System identification failed: {error}"),
     }
     print_cpu(&adapter);
+    print_ram(&adapter);
     for (label, feature) in [
         ("CPU load/frequency", PlatformFeature::CpuMetrics),
-        ("RAM", PlatformFeature::RamMetrics),
         ("Storage", PlatformFeature::DiskStorage),
         ("Registers", PlatformFeature::HardwareRegisters),
     ] {
@@ -78,10 +78,14 @@ fn print_cpu(adapter: &impl PlatformAdapter) {
 }
 
 fn print_field<T: std::fmt::Display>(label: &str, result: PlatformResult<T>) {
+    print_field_with(label, result, |value| value.to_string());
+}
+
+fn print_field_with<T>(label: &str, result: PlatformResult<T>, format: impl FnOnce(&T) -> String) {
     match result {
         PlatformResult::Success(measurement) => println!(
             "{label}: {} [source={}, captured_at={}]",
-            measurement.value,
+            format(&measurement.value),
             source_label(measurement.source),
             measurement.timestamp.to_rfc3339()
         ),
@@ -99,5 +103,59 @@ fn source_label(source: DataSource) -> &'static str {
         DataSource::Measured => "MEASURED",
         DataSource::Calculated => "CALCULATED",
         DataSource::Simulated => "SIMULATED",
+    }
+}
+
+fn print_ram(adapter: &impl PlatformAdapter) {
+    let result = adapter.ram_info();
+    println!("RAM statistics: {}", result.availability());
+    match result {
+        PlatformResult::Success(snapshot) => {
+            print_field_with(
+                "Total RAM (OS-visible)",
+                snapshot.value.total_bytes,
+                format_bytes,
+            );
+            print_field_with(
+                "Available RAM (sysinfo-reported)",
+                snapshot.value.available_bytes,
+                format_bytes,
+            );
+            print_field_with(
+                "Used RAM (total - available)",
+                snapshot.value.used_bytes,
+                format_bytes,
+            );
+            println!("Available RAM may include reclaimable caches or backend estimates.");
+            println!(
+                "Total is OS-visible capacity, not installed DIMM capacity or a container quota."
+            );
+        }
+        PlatformResult::PermissionRequired(reason) => {
+            eprintln!("RAM permission required: {reason}")
+        }
+        PlatformResult::Unavailable(reason) => eprintln!("RAM unavailable: {reason}"),
+        PlatformResult::NotImplemented(reason) => eprintln!("RAM not implemented: {reason}"),
+        PlatformResult::Error(error) => eprintln!("RAM statistics failed: {error}"),
+    }
+}
+
+fn format_bytes(bytes: &u64) -> String {
+    format!(
+        "{bytes} bytes (~{:.2} GiB)",
+        *bytes as f64 / 1_073_741_824.0
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_bytes;
+
+    #[test]
+    fn byte_display_uses_binary_gib_and_preserves_exact_bytes() {
+        assert_eq!(format_bytes(&0), "0 bytes (~0.00 GiB)");
+        assert_eq!(format_bytes(&1_073_741_824), "1073741824 bytes (~1.00 GiB)");
+        assert_eq!(format_bytes(&1_610_612_736), "1610612736 bytes (~1.50 GiB)");
+        assert!(format_bytes(&u64::MAX).starts_with("18446744073709551615 bytes"));
     }
 }

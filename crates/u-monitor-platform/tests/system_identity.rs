@@ -39,7 +39,6 @@ fn hardware_capabilities_remain_unimplemented() {
     let adapter = NativePlatformAdapter;
     for feature in [
         PlatformFeature::CpuMetrics,
-        PlatformFeature::RamMetrics,
         PlatformFeature::DiskStorage,
         PlatformFeature::HardwareRegisters,
     ] {
