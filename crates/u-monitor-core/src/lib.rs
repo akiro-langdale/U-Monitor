@@ -1,6 +1,9 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
+mod cpu;
 mod system;
+
+pub use cpu::CpuInfo;
 
 pub use system::{Architecture, OperatingSystem, SystemIdentity};
 
@@ -109,6 +112,7 @@ impl<T> PlatformResult<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformFeature {
     SystemIdentity,
+    CpuDiscovery,
     CpuMetrics,
     RamMetrics,
     DiskStorage,
@@ -117,6 +121,11 @@ pub enum PlatformFeature {
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Discovers OS-reported CPU models and topology without sampling CPU load.
+    fn cpu_info(&self) -> PlatformResult<CpuInfo> {
+        PlatformResult::NotImplemented("CPU discovery is not implemented".into())
+    }
+
     /// Returns build-target metadata, not physical hardware characteristics.
     fn system_identity(&self) -> PlatformResult<SystemIdentity> {
         PlatformResult::NotImplemented("System identification is not implemented".into())
