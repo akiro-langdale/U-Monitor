@@ -1,9 +1,11 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
 mod cpu;
+mod ram;
 mod system;
 
 pub use cpu::CpuInfo;
+pub use ram::RamInfo;
 
 pub use system::{Architecture, OperatingSystem, SystemIdentity};
 
@@ -121,6 +123,11 @@ pub enum PlatformFeature {
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Returns one RAM statistics snapshot without reading physical memory bytes.
+    fn ram_info(&self) -> PlatformResult<RamInfo> {
+        PlatformResult::NotImplemented("RAM statistics are not implemented".into())
+    }
+
     /// Discovers OS-reported CPU models and topology without sampling CPU load.
     fn cpu_info(&self) -> PlatformResult<CpuInfo> {
         PlatformResult::NotImplemented("CPU discovery is not implemented".into())
