@@ -1,0 +1,8 @@
+[package]
+name = "u-monitor-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+thiserror = { workspace = true }

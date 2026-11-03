@@ -1,0 +1,7 @@
+[package]
+name = "u-monitor-platform"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+u-monitor-core = { path = "../u-monitor-core" }

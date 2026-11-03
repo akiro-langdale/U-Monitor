@@ -1,0 +1,14 @@
+[package]
+name = "u-monitor-ui"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "u-monitor"
+path = "src/main.rs"
+
+[dependencies]
+u-monitor-core = { path = "../u-monitor-core" }
+u-monitor-platform = { path = "../u-monitor-platform" }
+u-monitor-telemetry = { path = "../u-monitor-telemetry" }
+u-monitor-simulation = { path = "../u-monitor-simulation" }
