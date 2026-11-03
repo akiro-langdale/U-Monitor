@@ -1,6 +1,7 @@
+use std::time::Duration;
 use u_monitor_core::{DataSource, PlatformAdapter, PlatformFeature, PlatformResult};
 use u_monitor_platform::NativePlatformAdapter;
-use u_monitor_telemetry::TelemetryCollector;
+use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
 fn main() {
     let adapter = NativePlatformAdapter;
@@ -109,27 +110,49 @@ fn source_label(source: DataSource) -> &'static str {
 }
 
 fn print_ram_telemetry() {
-    // Explicit retention policy for this single-snapshot console demonstration.
-    let mut collector = match TelemetryCollector::new(NativePlatformAdapter, 60) {
-        Ok(collector) => collector,
+    let config = WorkerConfig {
+        interval: Duration::from_secs(1),
+        history_capacity: 60,
+        channel_capacity: 4,
+    };
+    let worker = match TelemetryWorker::start(NativePlatformAdapter, config) {
+        Ok(worker) => worker,
         Err(error) => {
-            eprintln!("Telemetry configuration failed: {error}");
+            eprintln!("Telemetry startup failed: {error}");
             return;
         }
     };
-    match collector.sample() {
-        Ok(snapshot) => {
-            println!(
-                "Telemetry snapshot #{}: captured_at={}, elapsed={:?}, history={}/{}",
-                snapshot.sequence,
-                snapshot.captured_at.to_rfc3339(),
-                snapshot.elapsed,
-                collector.history().len(),
-                collector.capacity(),
-            );
-            print_ram(snapshot.ram);
+    for _ in 0..3 {
+        match worker.recv_timeout(Duration::from_secs(5)) {
+            Ok(snapshot) => {
+                println!(
+                    "Telemetry snapshot #{}: captured_at={}, elapsed={:?}, dropped_notifications={}",
+                    snapshot.sequence,
+                    snapshot.captured_at.to_rfc3339(),
+                    snapshot.elapsed,
+                    worker.dropped_notifications(),
+                );
+                print_ram(snapshot.ram);
+            }
+            Err(error) => {
+                eprintln!("Telemetry receive failed: {error}");
+                break;
+            }
         }
-        Err(error) => eprintln!("Telemetry collection failed: {error}"),
+    }
+    match worker.stop() {
+        Ok(report) => {
+            println!(
+                "Telemetry stopped: samples={}, retained={}, dropped_notifications={}",
+                report.samples_collected,
+                report.history.len(),
+                report.dropped_notifications
+            );
+            if let Err(error) = report.result {
+                eprintln!("Telemetry worker failed: {error}");
+            }
+        }
+        Err(error) => eprintln!("Telemetry shutdown failed: {error}"),
     }
 }
 fn print_ram(result: PlatformResult<u_monitor_core::RamInfo>) {

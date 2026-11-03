@@ -1,11 +1,14 @@
-//! Synchronous RAM sampling and bounded in-memory history.
-//! Scheduling and worker threads are intentionally left to the caller.
+//! RAM sampling, bounded history and an optional background worker.
+//! The collector can also be used independently without threads.
+
+mod worker;
 use std::{
     collections::VecDeque,
     num::NonZeroUsize,
     time::{Duration, Instant, SystemTime},
 };
 use u_monitor_core::{DiagnosticError, PlatformAdapter, PlatformResult, RamInfo, Timestamp};
+pub use worker::{TelemetryWorker, WorkerConfig, WorkerReport};
 
 /// One attempt to obtain RAM data. Failed attempts remain in history as failures.
 #[derive(Debug, Clone, PartialEq, Eq)]
