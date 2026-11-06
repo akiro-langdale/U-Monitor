@@ -146,7 +146,11 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 05.2 · RAM").small().weak());
+                ui.label(
+                    egui::RichText::new("Этап 05.3 · История RAM")
+                        .small()
+                        .weak(),
+                );
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {

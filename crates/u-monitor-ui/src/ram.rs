@@ -3,9 +3,13 @@ use std::{sync::mpsc::TryRecvError, time::Duration};
 use u_monitor_core::{DataSource, DiagnosticError, PlatformResult, RamInfo};
 use u_monitor_telemetry::{TelemetrySnapshot, TelemetryWorker};
 
+mod history;
+use history::RamHistory;
+
 pub(crate) struct RamPanel {
     worker: Option<TelemetryWorker>,
     latest: Option<TelemetrySnapshot>,
+    history: RamHistory,
     error: Option<DiagnosticError>,
     disconnected: bool,
     interval_ms: u64,
@@ -21,6 +25,7 @@ impl RamPanel {
             worker,
             error,
             latest: None,
+            history: RamHistory::default(),
             disconnected: false,
             interval_ms: 1000,
             dropped: 0,
@@ -31,7 +36,10 @@ impl RamPanel {
             // Bound work per frame; never wait for a snapshot here.
             for _ in 0..8 {
                 match worker.try_recv() {
-                    Ok(snapshot) => self.latest = Some(snapshot),
+                    Ok(snapshot) => {
+                        self.history.push(&snapshot);
+                        self.latest = Some(snapshot);
+                    }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.disconnected = true;
@@ -74,6 +82,7 @@ impl RamPanel {
         if let Some(e) = &self.error {
             ui.colored_label(ui.visuals().error_fg_color, format!("ERROR: {e}"));
         }
+        self.history.show(ui);
         let Some(snapshot) = &self.latest else {
             if self.worker.is_some() && !self.disconnected {
                 ui.label("Ожидание первого снимка RAM…");
