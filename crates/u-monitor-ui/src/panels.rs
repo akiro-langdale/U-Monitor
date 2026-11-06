@@ -48,7 +48,7 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.strong(page.title());
-                ui.monospace(if matches!(page, Page::Ram | Page::Cpu) {
+                ui.monospace(if matches!(page, Page::Ram | Page::Cpu | Page::Storage) {
                     "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                 } else {
                     "NOT_IMPLEMENTED"
@@ -56,6 +56,9 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
             });
             ui.label(match page {
                 Page::Cpu => "Модели CPU, физические ядра и логические процессоры по данным ОС.",
+                Page::Storage => {
+                    "Смонтированные тома, файловые системы и доступное пространство по данным ОС."
+                }
                 Page::Ram => {
                     "Реальные снимки RAM, управление интервалом и график истории использования."
                 }
