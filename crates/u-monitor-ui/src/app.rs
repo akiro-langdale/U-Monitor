@@ -1,4 +1,4 @@
-use crate::{panels, ram::RamPanel};
+use crate::{cpu, panels, ram::RamPanel};
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
@@ -12,7 +12,7 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
     )
 }
 use eframe::egui;
-use u_monitor_core::{PlatformResult, SystemIdentity};
+use u_monitor_core::{CpuInfo, PlatformResult, SystemIdentity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Page {
@@ -49,7 +49,7 @@ impl Page {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Overview => "Система и доступность разделов",
-            Self::Cpu => "Модель, топология и нагрузка процессора",
+            Self::Cpu => "Модели процессора и число ядер",
             Self::Ram => "Статистика оперативной памяти",
             Self::Storage => "Тома, файловые системы и пространство",
             Self::Registers => "Снимки регистров выбранного потока",
@@ -82,6 +82,7 @@ pub(crate) struct MonitorApp {
     page: Page,
     dark: bool,
     identity: PlatformResult<SystemIdentity>,
+    cpu: PlatformResult<CpuInfo>,
     ram: RamPanel,
 }
 
@@ -89,6 +90,7 @@ impl MonitorApp {
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
         identity: PlatformResult<SystemIdentity>,
+        cpu: PlatformResult<CpuInfo>,
         ram: RamPanel,
     ) -> Self {
         let dark = restored_dark(cc.storage);
@@ -101,6 +103,7 @@ impl MonitorApp {
             page: Page::Overview,
             dark,
             identity,
+            cpu,
             ram,
         }
     }
@@ -147,7 +150,7 @@ impl MonitorApp {
                 ui.add_space(24.0);
                 ui.separator();
                 ui.label(
-                    egui::RichText::new("Этап 05.3 · История RAM")
+                    egui::RichText::new("Этап 05.4 · Сведения CPU")
                         .small()
                         .weak(),
                 );
@@ -160,6 +163,7 @@ impl MonitorApp {
                 ui.add_space(20.0);
                 match self.page {
                     Page::Overview => panels::overview(ui, &self.identity),
+                    Page::Cpu => cpu::show(ui, &self.cpu),
                     Page::Ram => self.ram.show(ui),
                     page => panels::pending(ui, page),
                 }
@@ -218,6 +222,7 @@ mod tests {
                         page,
                         dark,
                         identity: identity.clone(),
+                        cpu: PlatformResult::NotImplemented("test fixture".into()),
                         ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
                     };
                     let output = ctx.run(egui::RawInput::default(), |ctx| app.render(ctx));
@@ -248,6 +253,7 @@ mod tests {
                 page: Page::Overview,
                 dark,
                 identity: PlatformResult::NotImplemented("test fixture".into()),
+                cpu: PlatformResult::NotImplemented("test fixture".into()),
                 ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
             };
             eframe::App::save(&mut app, &mut storage);
