@@ -5,7 +5,7 @@ mod ram;
 mod storage;
 mod system;
 
-pub use cpu::CpuInfo;
+pub use cpu::{CpuInfo, CpuMetrics, CpuUsagePercent, LogicalCpuUsage};
 pub use ram::RamInfo;
 pub use storage::{StorageKind, StorageVolume, VolumeSpace};
 
@@ -126,6 +126,12 @@ pub enum PlatformFeature {
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Samples CPU utilization while retaining backend counters between calls.
+    /// First/too-early attempts may be Unavailable. Must not sleep to warm up.
+    fn cpu_metrics(&mut self) -> PlatformResult<CpuMetrics> {
+        PlatformResult::NotImplemented("CPU utilization is not implemented".into())
+    }
+
     /// Enumerates mounted volumes visible to the backend, not all physical disks.
     fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
         PlatformResult::NotImplemented("Mounted-volume discovery is not implemented".into())

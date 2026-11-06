@@ -9,7 +9,7 @@ use eframe::egui;
 use ram::RamPanel;
 use std::time::Duration;
 use u_monitor_core::PlatformAdapter;
-use u_monitor_platform::NativePlatformAdapter;
+use u_monitor_platform::{NativePlatformAdapter, NativeTelemetryAdapter};
 use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
 fn main() -> eframe::Result {
@@ -18,7 +18,7 @@ fn main() -> eframe::Result {
     let cpu = NativePlatformAdapter.cpu_info();
     let storage = NativePlatformAdapter.storage_volumes();
     let ram = RamPanel::new(TelemetryWorker::start(
-        NativePlatformAdapter,
+        NativeTelemetryAdapter::default(),
         WorkerConfig {
             interval: Duration::from_secs(1),
             history_capacity: 60,

@@ -2821,6 +2821,7 @@ name = "u-monitor-telemetry"
 version = "0.1.0"
 dependencies = [
  "u-monitor-core",
+ "u-monitor-platform",
 ]
 
 [[package]]
