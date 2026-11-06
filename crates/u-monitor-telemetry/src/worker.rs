@@ -136,7 +136,7 @@ impl TelemetryWorker {
         let worker_control = Arc::clone(&control);
         let worker_dropped = Arc::clone(&dropped);
         let join = thread::Builder::new()
-            .name("u-monitor-ram".into())
+            .name("u-monitor-telemetry".into())
             .spawn(move || run(collector, sender, worker_control, worker_dropped))
             .map_err(|error| failure(&format!("Failed to spawn telemetry worker: {error}")))?;
         Ok(Self {

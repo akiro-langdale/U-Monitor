@@ -1,4 +1,4 @@
-//! RAM sampling, bounded history and an optional background worker.
+//! CPU and RAM sampling, bounded history and an optional background worker.
 //! The collector can also be used independently without threads.
 
 mod worker;
@@ -7,11 +7,14 @@ use std::{
     num::NonZeroUsize,
     time::{Duration, Instant, SystemTime},
 };
-use u_monitor_core::{DiagnosticError, PlatformAdapter, PlatformResult, RamInfo, Timestamp};
+use u_monitor_core::{
+    CpuMetrics, DiagnosticError, PlatformAdapter, PlatformResult, RamInfo, Timestamp,
+};
 pub use worker::{TelemetryWorker, WorkerConfig, WorkerReport};
 
-/// One attempt to obtain RAM data. Failed attempts remain in history as failures.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One sampling cycle. CPU and RAM are sequential, not an atomic OS snapshot.
+/// Failed attempts remain in history as failures.
+#[derive(Debug, Clone, PartialEq)]
 pub struct TelemetrySnapshot {
     /// Starts at 1 and increases independently of history eviction.
     pub sequence: u64,
@@ -22,6 +25,7 @@ pub struct TelemetrySnapshot {
     /// This is not a sampling interval or the duration of the adapter request.
     pub elapsed: Duration,
     pub ram: PlatformResult<RamInfo>,
+    pub cpu: PlatformResult<CpuMetrics>,
 }
 
 /// Owns an adapter and retains at most capacity snapshots, oldest first.
@@ -53,17 +57,19 @@ impl<A: PlatformAdapter> TelemetryCollector<A> {
     }
 
     /// Samples exactly once and returns an owned snapshot also retained in history.
-    /// RAM failures are data in the snapshot; only collector failures use Err.
+    /// Adapter failures are data in the snapshot; only collector failures use Err.
     pub fn sample(&mut self) -> Result<TelemetrySnapshot, DiagnosticError> {
         let sequence = self.last_sequence.checked_add(1).ok_or_else(|| {
             DiagnosticError::StorageError("Telemetry sequence number exhausted".into())
         })?;
         let ram = self.adapter.ram_info();
+        let cpu = self.adapter.cpu_metrics();
         let snapshot = TelemetrySnapshot {
             sequence,
             captured_at: SystemTime::now().into(),
             elapsed: self.started_at.elapsed(),
             ram,
+            cpu,
         };
         if self.history.len() == self.capacity.get() {
             self.history.pop_front();

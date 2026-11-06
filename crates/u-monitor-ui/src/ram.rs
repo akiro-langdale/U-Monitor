@@ -206,6 +206,7 @@ mod tests {
             PlatformResult::NotImplemented("pending".into()),
         ] {
             panel.latest = Some(TelemetrySnapshot {
+                cpu: PlatformResult::NotImplemented("test fixture".into()),
                 sequence: 1,
                 captured_at: UNIX_EPOCH.into(),
                 elapsed: Duration::ZERO,

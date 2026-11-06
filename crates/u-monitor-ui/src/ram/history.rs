@@ -183,6 +183,7 @@ mod tests {
             })
         };
         TelemetrySnapshot {
+            cpu: PlatformResult::NotImplemented("test fixture".into()),
             sequence,
             elapsed: Duration::from_millis(millis),
             captured_at: UNIX_EPOCH.into(),

@@ -1,13 +1,51 @@
 //! Platform adapters for system identity, CPU, RAM and mounted volumes.
 mod cpu;
+mod cpu_metrics;
 mod ram;
 mod storage;
 
+/// Backend minimum between CPU counter refreshes; this varies by target OS.
+pub const MINIMUM_CPU_SAMPLING_INTERVAL: std::time::Duration = sysinfo::MINIMUM_CPU_UPDATE_INTERVAL;
+
 use std::time::SystemTime;
 use u_monitor_core::{
-    Architecture, Availability, CpuInfo, DataSource, Measurement, OperatingSystem, PlatformAdapter,
-    PlatformFeature, PlatformResult, RamInfo, StorageVolume, SystemIdentity,
+    Architecture, Availability, CpuInfo, CpuMetrics, DataSource, Measurement, OperatingSystem,
+    PlatformAdapter, PlatformFeature, PlatformResult, RamInfo, StorageVolume, SystemIdentity,
 };
+
+/// Stateful CPU and RAM sampling adapter owned exclusively by a collector.
+/// System counters are initialized lazily on the sampling thread.
+#[derive(Default)]
+pub struct NativeTelemetryAdapter {
+    cpu: cpu_metrics::CpuSampler,
+}
+
+impl PlatformAdapter for NativeTelemetryAdapter {
+    fn cpu_metrics(&mut self) -> PlatformResult<CpuMetrics> {
+        self.cpu.sample()
+    }
+
+    fn ram_info(&self) -> PlatformResult<RamInfo> {
+        ram::discover()
+    }
+
+    fn name(&self) -> &'static str {
+        "Native Telemetry Adapter"
+    }
+
+    fn check_availability(&self, feature: PlatformFeature) -> Availability {
+        match feature {
+            PlatformFeature::CpuMetrics | PlatformFeature::RamMetrics => {
+                if sysinfo::IS_SUPPORTED_SYSTEM {
+                    Availability::Supported
+                } else {
+                    Availability::Unavailable
+                }
+            }
+            _ => Availability::NotImplemented,
+        }
+    }
+}
 
 /// Adapter for metadata describing the currently executing binary.
 #[derive(Debug, Default)]
