@@ -55,7 +55,7 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 });
             });
             ui.label(if page == Page::Ram {
-                "Реальные снимки RAM, управление интервалом и индикатор использования."
+                "Реальные снимки RAM, управление интервалом и график истории использования."
             } else {
                 page.pending()
             });
