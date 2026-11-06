@@ -1,4 +1,4 @@
-use crate::panels;
+use crate::{panels, ram::RamPanel};
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
@@ -82,12 +82,14 @@ pub(crate) struct MonitorApp {
     page: Page,
     dark: bool,
     identity: PlatformResult<SystemIdentity>,
+    ram: RamPanel,
 }
 
 impl MonitorApp {
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
         identity: PlatformResult<SystemIdentity>,
+        ram: RamPanel,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -99,11 +101,13 @@ impl MonitorApp {
             page: Page::Overview,
             dark,
             identity,
+            ram,
         }
     }
 
     // No OS queries, worker startup or blocking receives inside a UI frame.
     fn render(&mut self, ctx: &egui::Context) {
+        self.ram.poll(ctx);
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -142,7 +146,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 05.1 · Каркас GUI").small().weak());
+                ui.label(egui::RichText::new("Этап 05.2 · RAM").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -152,6 +156,7 @@ impl MonitorApp {
                 ui.add_space(20.0);
                 match self.page {
                     Page::Overview => panels::overview(ui, &self.identity),
+                    Page::Ram => self.ram.show(ui),
                     page => panels::pending(ui, page),
                 }
             });
@@ -160,6 +165,11 @@ impl MonitorApp {
 }
 
 impl eframe::App for MonitorApp {
+    fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        if let Err(error) = self.ram.shutdown() {
+            eprintln!("RAM shutdown failed: {error}");
+        }
+    }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string(THEME_KEY, if self.dark { "dark" } else { "light" }.into());
     }
@@ -204,6 +214,7 @@ mod tests {
                         page,
                         dark,
                         identity: identity.clone(),
+                        ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
                     };
                     let output = ctx.run(egui::RawInput::default(), |ctx| app.render(ctx));
                     assert!(!output.shapes.is_empty());
@@ -233,6 +244,7 @@ mod tests {
                 page: Page::Overview,
                 dark,
                 identity: PlatformResult::NotImplemented("test fixture".into()),
+                ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
             };
             eframe::App::save(&mut app, &mut storage);
             assert_eq!(restored_dark(Some(&storage)), dark);

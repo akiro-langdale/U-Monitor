@@ -1,14 +1,26 @@
 mod app;
 mod panels;
+mod ram;
 
 use app::MonitorApp;
 use eframe::egui;
+use ram::RamPanel;
+use std::time::Duration;
 use u_monitor_core::PlatformAdapter;
 use u_monitor_platform::NativePlatformAdapter;
+use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
 fn main() -> eframe::Result {
     // Composition root: acquire immutable identity once, before rendering frames.
     let identity = NativePlatformAdapter.system_identity();
+    let ram = RamPanel::new(TelemetryWorker::start(
+        NativePlatformAdapter,
+        WorkerConfig {
+            interval: Duration::from_secs(1),
+            history_capacity: 60,
+            channel_capacity: 4,
+        },
+    ));
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_app_id("u-monitor")
@@ -20,6 +32,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         concat!("U-Monitor ", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity)))),
+        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, ram)))),
     )
 }

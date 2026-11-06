@@ -48,9 +48,17 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.strong(page.title());
-                ui.monospace(Availability::NotImplemented.to_string());
+                ui.monospace(if page == Page::Ram {
+                    "ПАНЕЛЬ ПОДКЛЮЧЕНА"
+                } else {
+                    "NOT_IMPLEMENTED"
+                });
             });
-            ui.label(page.pending());
+            ui.label(if page == Page::Ram {
+                "Реальные снимки RAM, управление интервалом и индикатор использования."
+            } else {
+                page.pending()
+            });
         });
         ui.add_space(6.0);
     }
