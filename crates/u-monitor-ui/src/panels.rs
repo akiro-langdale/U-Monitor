@@ -48,16 +48,18 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.strong(page.title());
-                ui.monospace(if page == Page::Ram {
+                ui.monospace(if matches!(page, Page::Ram | Page::Cpu) {
                     "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                 } else {
                     "NOT_IMPLEMENTED"
                 });
             });
-            ui.label(if page == Page::Ram {
-                "Реальные снимки RAM, управление интервалом и график истории использования."
-            } else {
-                page.pending()
+            ui.label(match page {
+                Page::Cpu => "Модели CPU, физические ядра и логические процессоры по данным ОС.",
+                Page::Ram => {
+                    "Реальные снимки RAM, управление интервалом и график истории использования."
+                }
+                _ => page.pending(),
             });
         });
         ui.add_space(6.0);

@@ -1,4 +1,5 @@
 mod app;
+mod cpu;
 mod panels;
 mod ram;
 
@@ -13,6 +14,7 @@ use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 fn main() -> eframe::Result {
     // Composition root: acquire immutable identity once, before rendering frames.
     let identity = NativePlatformAdapter.system_identity();
+    let cpu = NativePlatformAdapter.cpu_info();
     let ram = RamPanel::new(TelemetryWorker::start(
         NativePlatformAdapter,
         WorkerConfig {
@@ -32,6 +34,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         concat!("U-Monitor ", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, ram)))),
+        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, cpu, ram)))),
     )
 }
