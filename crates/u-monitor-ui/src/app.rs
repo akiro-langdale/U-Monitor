@@ -1,4 +1,4 @@
-use crate::{cpu, live::LiveTelemetry, panels, storage};
+use crate::{cpu, live::LiveTelemetry, memory::MemoryPanel, panels, storage};
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
@@ -12,13 +12,17 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
     )
 }
 use eframe::egui;
-use u_monitor_core::{CpuInfo, PlatformResult, StorageVolume, SystemIdentity};
+use u_monitor_core::{
+    CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, StorageVolume, SystemIdentity,
+    VirtualMemoryRegion,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Page {
     Overview,
     Cpu,
     Ram,
+    Memory,
     Storage,
     Registers,
     Cache,
@@ -26,10 +30,11 @@ pub(crate) enum Page {
 }
 
 impl Page {
-    pub(crate) const ALL: [Self; 7] = [
+    pub(crate) const ALL: [Self; 8] = [
         Self::Overview,
         Self::Cpu,
         Self::Ram,
+        Self::Memory,
         Self::Storage,
         Self::Registers,
         Self::Cache,
@@ -40,6 +45,7 @@ impl Page {
             Self::Overview => "Обзор",
             Self::Cpu => "CPU",
             Self::Ram => "RAM",
+            Self::Memory => "Память",
             Self::Storage => "Накопители",
             Self::Registers => "Регистры",
             Self::Cache => "Кэш",
@@ -51,6 +57,7 @@ impl Page {
             Self::Overview => "Система и доступность разделов",
             Self::Cpu => "Топология CPU и живая нагрузка",
             Self::Ram => "Статистика оперативной памяти",
+            Self::Memory => "Виртуальные регионы и HEX текущего процесса",
             Self::Storage => "Тома, файловые системы и пространство",
             Self::Registers => "Снимки регистров выбранного потока",
             Self::Cache => "Характеристики и иерархия кэшей",
@@ -62,6 +69,9 @@ impl Page {
             Self::Overview => "",
             Self::Cpu => "Панель CPU подключена: топология при запуске и живая нагрузка.",
             Self::Ram => "Панель RAM подключена: снимки, интервал и история использования.",
+            Self::Memory => {
+                "Панель памяти подключена: карта виртуальных регионов текущего процесса."
+            }
             Self::Storage => {
                 "Панель накопителей подключена: смонтированные тома на момент запуска."
             }
@@ -81,6 +91,8 @@ pub(crate) struct MonitorApp {
     cpu: PlatformResult<CpuInfo>,
     storage: PlatformResult<Vec<StorageVolume>>,
     live: LiveTelemetry,
+    memory: MemoryPanel,
+    read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
 }
 
 impl MonitorApp {
@@ -90,6 +102,8 @@ impl MonitorApp {
         cpu: PlatformResult<CpuInfo>,
         storage: PlatformResult<Vec<StorageVolume>>,
         live: LiveTelemetry,
+        regions: PlatformResult<Vec<VirtualMemoryRegion>>,
+        read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -104,10 +118,13 @@ impl MonitorApp {
             cpu,
             storage,
             live,
+            memory: MemoryPanel::new(regions),
+            read_memory,
         }
     }
 
     // No OS queries, worker startup or blocking receives inside a UI frame.
+    // Memory HEX reads run only on explicit user button clicks.
     fn render(&mut self, ctx: &egui::Context) {
         self.live.poll(ctx);
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
@@ -148,7 +165,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 06 · CPU load").small().weak());
+                ui.label(egui::RichText::new("Этап 08 · Memory").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -161,6 +178,10 @@ impl MonitorApp {
                     Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
                     Page::Storage => storage::show(ui, &self.storage),
                     Page::Ram => self.live.show_ram(ui),
+                    Page::Memory => {
+                        let read_memory = self.read_memory.as_ref();
+                        self.memory.show(ui, read_memory);
+                    }
                     page => panels::pending(ui, page),
                 }
             });
@@ -197,6 +218,8 @@ mod tests {
             cpu: PlatformResult::NotImplemented("test fixture".into()),
             storage: PlatformResult::NotImplemented("test fixture".into()),
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
+            memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
+            read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
         }
     }
 

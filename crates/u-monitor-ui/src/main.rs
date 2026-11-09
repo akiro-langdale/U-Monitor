@@ -1,6 +1,7 @@
 mod app;
 mod cpu;
 mod live;
+mod memory;
 mod panels;
 mod ram;
 mod storage;
@@ -18,6 +19,7 @@ fn main() -> eframe::Result {
     let identity = NativePlatformAdapter.system_identity();
     let cpu = NativePlatformAdapter.cpu_info();
     let storage = NativePlatformAdapter.storage_volumes();
+    let regions = NativePlatformAdapter.virtual_memory_regions();
     let live = LiveTelemetry::new(TelemetryWorker::start(
         NativeTelemetryAdapter::default(),
         WorkerConfig {
@@ -37,6 +39,16 @@ fn main() -> eframe::Result {
     eframe::run_native(
         concat!("U-Monitor ", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, cpu, storage, live)))),
+        Box::new(move |cc| {
+            Ok(Box::new(MonitorApp::new(
+                cc,
+                identity,
+                cpu,
+                storage,
+                live,
+                regions,
+                Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
+            )))
+        }),
     )
 }

@@ -48,11 +48,13 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.strong(page.title());
-                ui.monospace(if matches!(page, Page::Ram | Page::Cpu | Page::Storage) {
-                    "ПАНЕЛЬ ПОДКЛЮЧЕНА"
-                } else {
-                    "NOT_IMPLEMENTED"
-                });
+                ui.monospace(
+                    if matches!(page, Page::Ram | Page::Cpu | Page::Storage | Page::Memory) {
+                        "ПАНЕЛЬ ПОДКЛЮЧЕНА"
+                    } else {
+                        "NOT_IMPLEMENTED"
+                    },
+                );
             });
             ui.label(match page {
                 Page::Cpu => "Топология CPU при запуске и живая нагрузка логических процессоров.",
@@ -61,6 +63,9 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 }
                 Page::Ram => {
                     "Реальные снимки RAM, управление интервалом и график истории использования."
+                }
+                Page::Memory => {
+                    "Виртуальные регионы текущего процесса и read-only HEX до 512 байт."
                 }
                 _ => page.pending(),
             });

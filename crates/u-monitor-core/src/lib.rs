@@ -1,11 +1,16 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
 mod cpu;
+mod memory;
 mod ram;
 mod storage;
 mod system;
 
 pub use cpu::{CpuInfo, CpuMetrics, CpuUsagePercent, LogicalCpuUsage};
+pub use memory::{
+    MemoryBytes, MemoryProtection, MemoryReadRequest, MemoryRegionKind, MemoryState,
+    VirtualMemoryRegion,
+};
 pub use ram::RamInfo;
 pub use storage::{StorageKind, StorageVolume, VolumeSpace};
 
@@ -119,6 +124,8 @@ pub enum PlatformFeature {
     CpuDiscovery,
     CpuMetrics,
     RamMetrics,
+    VirtualMemoryMap,
+    MemoryBytes,
     StorageDiscovery,
     DiskStorage,
     HardwareRegisters,
@@ -140,6 +147,22 @@ pub trait PlatformAdapter {
     /// Returns one RAM statistics snapshot without reading physical memory bytes.
     fn ram_info(&self) -> PlatformResult<RamInfo> {
         PlatformResult::NotImplemented("RAM statistics are not implemented".into())
+    }
+
+    /// Enumerates virtual regions of the current process only.
+    /// This is not a physical RAM dump and does not inspect other processes.
+    fn virtual_memory_regions(&self) -> PlatformResult<Vec<VirtualMemoryRegion>> {
+        PlatformResult::NotImplemented("Virtual memory map is not implemented".into())
+    }
+
+    /// Reads a bounded byte sample from the current process when protection allows.
+    /// Never writes memory. Foreign-process reads remain unimplemented.
+    fn read_current_process_bytes(
+        &self,
+        request: MemoryReadRequest,
+    ) -> PlatformResult<MemoryBytes> {
+        let _ = request;
+        PlatformResult::NotImplemented("Current-process memory reads are not implemented".into())
     }
 
     /// Discovers OS-reported CPU models and topology without sampling CPU load.
