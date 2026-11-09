@@ -104,4 +104,22 @@ mod tests {
         assert!(parse_maps_line("not-a-map-line").is_none());
         assert!(parse_maps_line("1000-1000 r--p 0 00:00 0").is_none());
     }
+
+    #[test]
+    fn fuzz_like_inputs_do_not_panic() {
+        let mut state = 0xC0FFEE_u32;
+        for _ in 0..4_096 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let len = (state % 192) as usize;
+            let bytes: Vec<u8> = (0..len)
+                .map(|index| ((state >> (index % 24)) & 0xFF) as u8)
+                .collect();
+            let text = String::from_utf8_lossy(&bytes);
+            let parsed = parse_maps_line(&text);
+            if let Some(region) = parsed {
+                assert!(region.size_bytes > 0);
+                assert!(!region.readable || region.protection.read);
+            }
+        }
+    }
 }

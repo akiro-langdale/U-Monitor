@@ -74,4 +74,23 @@ mod tests {
         assert_eq!(parse_cpu_list("0-3,8,10-11"), vec![0, 1, 2, 3, 8, 10, 11]);
         assert!(parse_size_bytes("").is_none());
     }
+
+    #[test]
+    fn fuzz_like_inputs_do_not_panic() {
+        let mut state = 0x51AFC0DE_u32;
+        for _ in 0..2_048 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let len = (state % 96) as usize;
+            let bytes: Vec<u8> = (0..len)
+                .map(|index| ((state >> (index % 20)) & 0xFF) as u8)
+                .collect();
+            let text = String::from_utf8_lossy(&bytes);
+            let _ = parse_size_bytes(&text);
+            let _ = parse_cache_kind(&text);
+            let cpus = parse_cpu_list(&text);
+            for pair in cpus.windows(2) {
+                assert!(pair[0] <= pair[1]);
+            }
+        }
+    }
 }
