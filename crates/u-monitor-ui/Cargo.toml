@@ -17,3 +17,5 @@ u-monitor-platform = { path = "../u-monitor-platform" }
 u-monitor-telemetry = { path = "../u-monitor-telemetry" }
 u-monitor-simulation = { path = "../u-monitor-simulation" }
 eframe = { version = "=0.33.3", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "accesskit", "persistence"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

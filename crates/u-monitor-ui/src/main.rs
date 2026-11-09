@@ -4,6 +4,7 @@ mod cpu;
 mod explorer;
 mod live;
 mod memory;
+mod observability;
 mod panels;
 mod processes;
 mod ram;
@@ -20,6 +21,8 @@ use u_monitor_platform::{NativePlatformAdapter, NativeTelemetryAdapter};
 use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
 fn main() -> eframe::Result {
+    observability::init_tracing();
+    tracing::info!("starting U-Monitor UI");
     // Composition root: acquire immutable identity once, before rendering frames.
     let identity = NativePlatformAdapter.system_identity();
     let capabilities = PlatformFeature::ALL

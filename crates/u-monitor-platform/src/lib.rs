@@ -2,11 +2,14 @@
 mod cache;
 mod cpu;
 mod cpu_metrics;
+mod observability;
 mod process;
 mod ram;
 mod registers;
 mod storage;
 mod virtual_memory;
+
+pub use observability::scrub_path_for_log;
 
 /// Backend minimum between CPU counter refreshes for the native sampler.
 pub const MINIMUM_CPU_SAMPLING_INTERVAL: std::time::Duration = cpu_metrics::MINIMUM_INTERVAL;
@@ -134,6 +137,10 @@ impl PlatformAdapter for NativePlatformAdapter {
     }
 
     fn system_identity(&self) -> PlatformResult<SystemIdentity> {
+        tracing::debug!(
+            adapter = self.name(),
+            "reading build-target system identity"
+        );
         PlatformResult::Success(Measurement {
             value: SystemIdentity {
                 operating_system: OperatingSystem::from(std::env::consts::OS),
