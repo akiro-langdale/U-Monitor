@@ -1,4 +1,4 @@
-use crate::{cpu, panels, ram::RamPanel, storage};
+use crate::{cpu, live::LiveTelemetry, panels, storage};
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
@@ -49,7 +49,7 @@ impl Page {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Overview => "Система и доступность разделов",
-            Self::Cpu => "Модели процессора и число ядер",
+            Self::Cpu => "Топология CPU и живая нагрузка",
             Self::Ram => "Статистика оперативной памяти",
             Self::Storage => "Тома, файловые системы и пространство",
             Self::Registers => "Снимки регистров выбранного потока",
@@ -60,14 +60,10 @@ impl Page {
     pub(crate) fn pending(self) -> &'static str {
         match self {
             Self::Overview => "",
-            Self::Cpu => {
-                "Панель CPU ещё не подключена. Обнаружение модели и числа ядер уже реализовано в библиотеке."
-            }
-            Self::Ram => {
-                "Панель RAM ещё не подключена. Фоновый сбор и история уже реализованы; подключение к GUI — следующий подшаг"
-            }
+            Self::Cpu => "Панель CPU подключена: топология при запуске и живая нагрузка.",
+            Self::Ram => "Панель RAM подключена: снимки, интервал и история использования.",
             Self::Storage => {
-                "Панель накопителей ещё не подключена. Обнаружение смонтированных томов уже реализовано в библиотеке."
+                "Панель накопителей подключена: смонтированные тома на момент запуска."
             }
             Self::Registers => "Чтение регистров выбранного потока ещё не реализовано.",
             Self::Cache => "Обнаружение топологии и счётчиков кэша ещё не реализовано.",
@@ -84,7 +80,7 @@ pub(crate) struct MonitorApp {
     identity: PlatformResult<SystemIdentity>,
     cpu: PlatformResult<CpuInfo>,
     storage: PlatformResult<Vec<StorageVolume>>,
-    ram: RamPanel,
+    live: LiveTelemetry,
 }
 
 impl MonitorApp {
@@ -93,7 +89,7 @@ impl MonitorApp {
         identity: PlatformResult<SystemIdentity>,
         cpu: PlatformResult<CpuInfo>,
         storage: PlatformResult<Vec<StorageVolume>>,
-        ram: RamPanel,
+        live: LiveTelemetry,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -107,13 +103,13 @@ impl MonitorApp {
             identity,
             cpu,
             storage,
-            ram,
+            live,
         }
     }
 
     // No OS queries, worker startup or blocking receives inside a UI frame.
     fn render(&mut self, ctx: &egui::Context) {
-        self.ram.poll(ctx);
+        self.live.poll(ctx);
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -152,7 +148,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 05.5 · Тома").small().weak());
+                ui.label(egui::RichText::new("Этап 06 · CPU load").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -162,9 +158,9 @@ impl MonitorApp {
                 ui.add_space(20.0);
                 match self.page {
                     Page::Overview => panels::overview(ui, &self.identity),
-                    Page::Cpu => cpu::show(ui, &self.cpu),
+                    Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
                     Page::Storage => storage::show(ui, &self.storage),
-                    Page::Ram => self.ram.show(ui),
+                    Page::Ram => self.live.show_ram(ui),
                     page => panels::pending(ui, page),
                 }
             });
@@ -174,8 +170,8 @@ impl MonitorApp {
 
 impl eframe::App for MonitorApp {
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
-        if let Err(error) = self.ram.shutdown() {
-            eprintln!("RAM shutdown failed: {error}");
+        if let Err(error) = self.live.shutdown() {
+            eprintln!("Telemetry shutdown failed: {error}");
         }
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -192,6 +188,17 @@ mod tests {
     use super::*;
     use std::time::UNIX_EPOCH;
     use u_monitor_core::{Architecture, DataSource, DiagnosticError, Measurement, OperatingSystem};
+
+    fn fixture_app(page: Page, dark: bool, identity: PlatformResult<SystemIdentity>) -> MonitorApp {
+        MonitorApp {
+            page,
+            dark,
+            identity,
+            cpu: PlatformResult::NotImplemented("test fixture".into()),
+            storage: PlatformResult::NotImplemented("test fixture".into()),
+            live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
+        }
+    }
 
     #[test]
     fn all_pages_render_with_identity_failures_and_unknown_targets() {
@@ -218,14 +225,7 @@ mod tests {
                     } else {
                         egui::Theme::Light
                     });
-                    let mut app = MonitorApp {
-                        page,
-                        dark,
-                        identity: identity.clone(),
-                        cpu: PlatformResult::NotImplemented("test fixture".into()),
-                        storage: PlatformResult::NotImplemented("test fixture".into()),
-                        ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
-                    };
+                    let mut app = fixture_app(page, dark, identity.clone());
                     let output = ctx.run(egui::RawInput::default(), |ctx| app.render(ctx));
                     assert!(!output.shapes.is_empty());
                 }
@@ -250,14 +250,11 @@ mod tests {
     fn selected_theme_survives_app_save_and_restore() {
         for dark in [false, true] {
             let mut storage = MemoryStorage::default();
-            let mut app = MonitorApp {
-                page: Page::Overview,
+            let mut app = fixture_app(
+                Page::Overview,
                 dark,
-                identity: PlatformResult::NotImplemented("test fixture".into()),
-                cpu: PlatformResult::NotImplemented("test fixture".into()),
-                storage: PlatformResult::NotImplemented("test fixture".into()),
-                ram: RamPanel::new(Err(DiagnosticError::PlatformError("test".into()))),
-            };
+                PlatformResult::NotImplemented("test fixture".into()),
+            );
             eframe::App::save(&mut app, &mut storage);
             assert_eq!(restored_dark(Some(&storage)), dark);
         }

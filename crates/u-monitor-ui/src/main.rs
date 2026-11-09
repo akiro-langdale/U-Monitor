@@ -1,12 +1,13 @@
 mod app;
 mod cpu;
+mod live;
 mod panels;
 mod ram;
 mod storage;
 
 use app::MonitorApp;
 use eframe::egui;
-use ram::RamPanel;
+use live::LiveTelemetry;
 use std::time::Duration;
 use u_monitor_core::PlatformAdapter;
 use u_monitor_platform::{NativePlatformAdapter, NativeTelemetryAdapter};
@@ -17,7 +18,7 @@ fn main() -> eframe::Result {
     let identity = NativePlatformAdapter.system_identity();
     let cpu = NativePlatformAdapter.cpu_info();
     let storage = NativePlatformAdapter.storage_volumes();
-    let ram = RamPanel::new(TelemetryWorker::start(
+    let live = LiveTelemetry::new(TelemetryWorker::start(
         NativeTelemetryAdapter::default(),
         WorkerConfig {
             interval: Duration::from_secs(1),
@@ -36,6 +37,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         concat!("U-Monitor ", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, cpu, storage, ram)))),
+        Box::new(move |cc| Ok(Box::new(MonitorApp::new(cc, identity, cpu, storage, live)))),
     )
 }

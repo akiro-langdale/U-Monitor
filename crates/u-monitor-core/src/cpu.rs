@@ -34,6 +34,11 @@ pub struct LogicalCpuUsage {
     pub index: usize,
     pub name: String,
     pub usage: PlatformResult<CpuUsagePercent>,
+    /// Current operating frequency in MHz when the OS exposes it.
+    /// A backend zero is treated as missing data, never as MEASURED idle clock.
+    pub current_mhz: PlatformResult<u64>,
+    /// Maximum frequency reported for this logical processor, when available.
+    pub max_mhz: PlatformResult<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

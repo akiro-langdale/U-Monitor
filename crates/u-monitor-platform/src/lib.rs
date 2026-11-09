@@ -4,8 +4,8 @@ mod cpu_metrics;
 mod ram;
 mod storage;
 
-/// Backend minimum between CPU counter refreshes; this varies by target OS.
-pub const MINIMUM_CPU_SAMPLING_INTERVAL: std::time::Duration = sysinfo::MINIMUM_CPU_UPDATE_INTERVAL;
+/// Backend minimum between CPU counter refreshes for the native sampler.
+pub const MINIMUM_CPU_SAMPLING_INTERVAL: std::time::Duration = cpu_metrics::MINIMUM_INTERVAL;
 
 use std::time::SystemTime;
 use u_monitor_core::{

@@ -61,6 +61,16 @@ fn success(value: f32) -> PlatformResult<CpuMetrics> {
                 index: 0,
                 name: "cpu0".into(),
                 usage,
+                current_mhz: PlatformResult::Success(Measurement {
+                    value: 3200,
+                    source: DataSource::Measured,
+                    timestamp: UNIX_EPOCH.into(),
+                }),
+                max_mhz: PlatformResult::Success(Measurement {
+                    value: 4800,
+                    source: DataSource::Measured,
+                    timestamp: UNIX_EPOCH.into(),
+                }),
             }],
         },
         source: DataSource::Measured,

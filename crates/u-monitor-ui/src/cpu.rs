@@ -1,8 +1,11 @@
-//! Renders the startup snapshot; performs no platform queries during a frame.
+//! CPU discovery at startup plus live utilization from shared telemetry.
+use crate::live::LiveTelemetry;
 use eframe::egui;
 use u_monitor_core::{CpuInfo, DataSource, PlatformResult};
 
-pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<CpuInfo>) {
+pub(crate) mod history;
+
+pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<CpuInfo>, live: &mut LiveTelemetry) {
     ui.label("Сведения CPU получены при запуске приложения.");
     let field_width = (ui.available_width() - 190.0).clamp(140.0, 420.0);
     field(ui, result, field_width, |_, _| {});
@@ -48,8 +51,11 @@ pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<CpuInfo>) {
     ui.add_space(12.0);
     ui.label("Физическое ядро — вычислительное ядро CPU. Логический процессор — аппаратный поток, доступный планировщику ОС. Их количество может различаться.");
     ui.label("Виртуальная машина или контейнер могут ограничивать видимую топологию. Данные относятся к представлению ОС на момент запуска.");
+    ui.add_space(16.0);
+    ui.heading("Живая нагрузка");
+    ui.label(egui::RichText::new("Источник: фоновый TelemetryWorker · MEASURED").weak());
     ui.add_space(8.0);
-    ui.monospace("Нагрузка и частоты: NOT_IMPLEMENTED");
+    live.show_cpu_live(ui);
 }
 
 fn field<T>(
@@ -104,11 +110,11 @@ mod tests {
         } else {
             egui::Theme::Light
         });
+        let mut live = LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into())));
         let mut text = String::new();
-        // The grid measures its columns on the first frame.
         for _ in 0..2 {
             let output = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| show(ui, result));
+                egui::CentralPanel::default().show(ctx, |ui| show(ui, result, &mut live));
             });
             fn collect(shape: &egui::Shape, text: &mut String) {
                 match shape {
@@ -149,6 +155,7 @@ mod tests {
                 "physical topology missing",
                 "MEASURED",
                 "1970-01-01T00:00:00+00:00",
+                "Живая нагрузка",
             ] {
                 assert!(text.contains(expected), "missing {expected}: {text}");
             }
@@ -165,8 +172,9 @@ mod tests {
         ] {
             let text = rendered_text(&result, true);
             assert!(text.contains(&result.availability().to_string()));
-            assert!(!text.contains("MEASURED"));
+            assert!(text.contains("Живая нагрузка"));
             assert!(!text.contains("Физические ядра"));
+            assert!(!text.contains("Модели процессора"));
         }
     }
 }

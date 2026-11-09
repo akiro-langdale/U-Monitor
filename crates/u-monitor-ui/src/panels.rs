@@ -55,7 +55,7 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 });
             });
             ui.label(match page {
-                Page::Cpu => "Модели CPU, физические ядра и логические процессоры по данным ОС.",
+                Page::Cpu => "Топология CPU при запуске и живая нагрузка логических процессоров.",
                 Page::Storage => {
                     "Смонтированные тома, файловые системы и доступное пространство по данным ОС."
                 }

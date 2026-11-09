@@ -23,14 +23,14 @@ impl Sample {
 }
 
 #[derive(Default)]
-pub(super) struct RamHistory {
+pub(crate) struct RamHistory {
     samples: VecDeque<Sample>,
 }
 
 impl RamHistory {
-    pub(super) fn push(&mut self, snapshot: &TelemetrySnapshot) {
+    pub(crate) fn push(&mut self, snapshot: &TelemetrySnapshot) {
         let usage = match &snapshot.ram {
-            PlatformResult::Success(m) => super::usage(&m.value),
+            PlatformResult::Success(m) => crate::ram::usage(&m.value),
             _ => None,
         };
         if self.samples.len() == CAPACITY {
@@ -44,7 +44,7 @@ impl RamHistory {
         });
     }
 
-    pub(super) fn show(&self, ui: &mut egui::Ui) {
+    pub(crate) fn show(&self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.strong("История использования RAM · CALCULATED");
         ui.small(format!(

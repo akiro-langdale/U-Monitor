@@ -44,12 +44,25 @@ fn native_worker_warms_up_then_reports_cpu_and_ram() {
         assert!((0.0..=100.0).contains(&usage.value.get()));
         assert_eq!(usage.timestamp, cpu.timestamp);
         assert_eq!(usage.source, DataSource::Measured);
+        if let PlatformResult::Success(mhz) = &processor.current_mhz {
+            assert!(mhz.value > 0);
+            assert_eq!(mhz.source, DataSource::Measured);
+        }
     }
     assert!(matches!(second.ram, PlatformResult::Success(_)));
+    let freq = cpu
+        .value
+        .logical_processors
+        .iter()
+        .find_map(|cpu| match &cpu.current_mhz {
+            PlatformResult::Success(m) => Some(m.value),
+            _ => None,
+        });
     eprintln!(
-        "CPU {:.2}% · {} logical processors · interval {:?} · UTC {}",
+        "CPU {:.2}% · {} logical processors · freq {:?} MHz · interval {:?} · UTC {}",
         total.value.get(),
         cpu.value.logical_processors.len(),
+        freq,
         cpu.value.sampling_interval,
         cpu.timestamp
     );
