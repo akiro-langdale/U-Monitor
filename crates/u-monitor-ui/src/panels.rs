@@ -49,7 +49,10 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
             ui.horizontal_wrapped(|ui| {
                 ui.strong(page.title());
                 ui.monospace(
-                    if matches!(page, Page::Ram | Page::Cpu | Page::Storage | Page::Memory) {
+                    if matches!(
+                        page,
+                        Page::Ram | Page::Cpu | Page::Storage | Page::Memory | Page::Registers
+                    ) {
                         "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                     } else {
                         "NOT_IMPLEMENTED"
@@ -66,6 +69,9 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 }
                 Page::Memory => {
                     "Виртуальные регионы текущего процесса и read-only HEX до 512 байт."
+                }
+                Page::Registers => {
+                    "Снимок GPR текущего потока UI: HEX/DEC/BIN и Δ к предыдущему снимку."
                 }
                 _ => page.pending(),
             });

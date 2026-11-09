@@ -4,6 +4,7 @@ mod live;
 mod memory;
 mod panels;
 mod ram;
+mod registers;
 mod storage;
 
 use app::MonitorApp;
@@ -20,6 +21,7 @@ fn main() -> eframe::Result {
     let cpu = NativePlatformAdapter.cpu_info();
     let storage = NativePlatformAdapter.storage_volumes();
     let regions = NativePlatformAdapter.virtual_memory_regions();
+    let registers = NativePlatformAdapter.current_thread_registers();
     let live = LiveTelemetry::new(TelemetryWorker::start(
         NativeTelemetryAdapter::default(),
         WorkerConfig {
@@ -47,7 +49,9 @@ fn main() -> eframe::Result {
                 storage,
                 live,
                 regions,
+                registers,
                 Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
+                Box::new(|| NativePlatformAdapter.current_thread_registers()),
             )))
         }),
     )

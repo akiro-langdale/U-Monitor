@@ -13,6 +13,7 @@ fn stub_reports_no_implemented_hardware_features() {
         PlatformFeature::MemoryBytes,
         PlatformFeature::DiskStorage,
         PlatformFeature::HardwareRegisters,
+        PlatformFeature::CurrentThreadRegisters,
     ] {
         assert_eq!(
             adapter.check_availability(feature),

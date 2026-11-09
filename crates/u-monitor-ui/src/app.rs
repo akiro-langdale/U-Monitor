@@ -1,4 +1,6 @@
-use crate::{cpu, live::LiveTelemetry, memory::MemoryPanel, panels, storage};
+use crate::{
+    cpu, live::LiveTelemetry, memory::MemoryPanel, panels, registers::RegistersPanel, storage,
+};
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
@@ -13,8 +15,8 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, StorageVolume, SystemIdentity,
-    VirtualMemoryRegion,
+    CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, RegisterSnapshot, StorageVolume,
+    SystemIdentity, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +61,7 @@ impl Page {
             Self::Ram => "Статистика оперативной памяти",
             Self::Memory => "Виртуальные регионы и HEX текущего процесса",
             Self::Storage => "Тома, файловые системы и пространство",
-            Self::Registers => "Снимки регистров выбранного потока",
+            Self::Registers => "Регистры текущего потока UI",
             Self::Cache => "Характеристики и иерархия кэшей",
             Self::Simulation => "Отдельные модели иерархии памяти",
         }
@@ -75,7 +77,9 @@ impl Page {
             Self::Storage => {
                 "Панель накопителей подключена: смонтированные тома на момент запуска."
             }
-            Self::Registers => "Чтение регистров выбранного потока ещё не реализовано.",
+            Self::Registers => {
+                "Панель регистров подключена: снимок текущего потока (другие потоки — отдельно)."
+            }
             Self::Cache => "Обнаружение топологии и счётчиков кэша ещё не реализовано.",
             Self::Simulation => {
                 "Модели ещё не реализованы. Будущие результаты будут явно помечены SIMULATED."
@@ -92,10 +96,13 @@ pub(crate) struct MonitorApp {
     storage: PlatformResult<Vec<StorageVolume>>,
     live: LiveTelemetry,
     memory: MemoryPanel,
+    registers: RegistersPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
+    refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
 }
 
 impl MonitorApp {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
         identity: PlatformResult<SystemIdentity>,
@@ -103,7 +110,9 @@ impl MonitorApp {
         storage: PlatformResult<Vec<StorageVolume>>,
         live: LiveTelemetry,
         regions: PlatformResult<Vec<VirtualMemoryRegion>>,
+        registers: PlatformResult<RegisterSnapshot>,
         read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
+        refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -119,7 +128,9 @@ impl MonitorApp {
             storage,
             live,
             memory: MemoryPanel::new(regions),
+            registers: RegistersPanel::new(registers),
             read_memory,
+            refresh_registers,
         }
     }
 
@@ -165,7 +176,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 08 · Memory").small().weak());
+                ui.label(egui::RichText::new("Этап 09 · Registers").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -181,6 +192,10 @@ impl MonitorApp {
                     Page::Memory => {
                         let read_memory = self.read_memory.as_ref();
                         self.memory.show(ui, read_memory);
+                    }
+                    Page::Registers => {
+                        let refresh = self.refresh_registers.as_ref();
+                        self.registers.show(ui, refresh);
                     }
                     page => panels::pending(ui, page),
                 }
@@ -219,7 +234,9 @@ mod tests {
             storage: PlatformResult::NotImplemented("test fixture".into()),
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
+            registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
+            refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
         }
     }
 

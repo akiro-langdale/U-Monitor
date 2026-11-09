@@ -73,6 +73,10 @@ Linux): база, размер, состояние, доступ и тип.
 отличия байт помечены `CALCULATED`. Это не физическая RAM и не память
 чужих процессов.
 
+Страница «Регистры» показывает MEASURED-снимок GPR текущего потока UI
+(Windows x86-64: `RtlCaptureContext`): HEX/DEC/BIN и Δ к предыдущему снимку
+(`CALCULATED`). Другие потоки и ISA пока не реализованы.
+
 ```powershell
 cargo run -p u-monitor-ui
 ```

@@ -3,6 +3,7 @@
 mod cpu;
 mod memory;
 mod ram;
+mod registers;
 mod storage;
 mod system;
 
@@ -12,6 +13,7 @@ pub use memory::{
     VirtualMemoryRegion,
 };
 pub use ram::RamInfo;
+pub use registers::{RegisterArchitecture, RegisterSnapshot, RegisterValue};
 pub use storage::{StorageKind, StorageVolume, VolumeSpace};
 
 pub use system::{Architecture, OperatingSystem, SystemIdentity};
@@ -129,6 +131,7 @@ pub enum PlatformFeature {
     StorageDiscovery,
     DiskStorage,
     HardwareRegisters,
+    CurrentThreadRegisters,
 }
 
 /// The contract for platform-dependent adapters
@@ -163,6 +166,12 @@ pub trait PlatformAdapter {
     ) -> PlatformResult<MemoryBytes> {
         let _ = request;
         PlatformResult::NotImplemented("Current-process memory reads are not implemented".into())
+    }
+
+    /// Captures general-purpose registers of the calling thread only.
+    /// Other threads usually require debug permissions and are not covered here.
+    fn current_thread_registers(&self) -> PlatformResult<RegisterSnapshot> {
+        PlatformResult::NotImplemented("Current-thread register capture is not implemented".into())
     }
 
     /// Discovers OS-reported CPU models and topology without sampling CPU load.
