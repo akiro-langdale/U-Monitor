@@ -2,8 +2,10 @@
 name = "u-monitor-ffi"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
 description = "Stable C ABI for U-Monitor platform and simulation APIs"
-license = "MIT OR Apache-2.0"
 
 [lib]
 name = "u_monitor"

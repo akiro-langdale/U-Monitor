@@ -3,6 +3,9 @@
 Нативный монитор на Rust и egui/eframe. Текущий GUI показывает статистику RAM
 и график последних 60 полученных снимков.
 
+Лицензия: MIT OR Apache-2.0. Документация: [architecture](docs/ARCHITECTURE.md),
+[security](docs/SECURITY.md), [release](docs/RELEASE.md), [changelog](CHANGELOG.md).
+
 ## Окружение разработки
 
 Требования: Rust `1.90.0` (см. `rust-toolchain.toml`), Git, доступ к
@@ -136,10 +139,14 @@ python examples/python/u_monitor.py
 разрывают линию, а не заменяются нулями. При остановке сборщика остаётся
 последняя история.
 
-Проверки:
+Проверки и релиз:
 
 ```powershell
 cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+cargo build --workspace --release
 ```
+
+Тег `v*` запускает `.github/workflows/release.yml` (черновик GitHub Release с
+бинарниками GUI и shared library). Детали — в `docs/RELEASE.md`.

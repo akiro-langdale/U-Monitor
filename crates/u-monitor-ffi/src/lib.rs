@@ -31,7 +31,8 @@ use std::os::raw::c_char;
 /// Library semantic version string (`MAJOR.MINOR.PATCH`), static storage.
 #[unsafe(no_mangle)]
 pub extern "C" fn um_version() -> *const c_char {
-    c"0.1.0".as_ptr()
+    // Keep in sync with `[workspace.package] version`.
+    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr().cast()
 }
 
 /// Writes a short English description of `status` into `buffer`.
