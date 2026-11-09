@@ -18,7 +18,7 @@ use u_monitor_core::{
     Architecture, Availability, CacheTopology, CpuInfo, CpuMetrics, DataSource, Measurement,
     MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
     PlatformResult, ProcessId, ProcessInfo, RamInfo, RegisterSnapshot, StorageVolume,
-    SystemIdentity, ThreadInfo, VirtualMemoryRegion,
+    SystemIdentity, ThreadId, ThreadInfo, VirtualMemoryRegion,
 };
 
 /// Stateful CPU and RAM sampling adapter owned exclusively by a collector.
@@ -99,6 +99,14 @@ impl PlatformAdapter for NativePlatformAdapter {
         process::list_threads(process_id)
     }
 
+    fn thread_registers(
+        &self,
+        process_id: ProcessId,
+        thread_id: ThreadId,
+    ) -> PlatformResult<RegisterSnapshot> {
+        registers::capture_thread(process_id, thread_id)
+    }
+
     fn name(&self) -> &'static str {
         "Native Platform Adapter"
     }
@@ -151,9 +159,13 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::ThreadEnumeration => Availability::Supported,
             #[cfg(not(any(windows, target_os = "linux")))]
             PlatformFeature::ThreadEnumeration => Availability::NotImplemented,
-            PlatformFeature::ForeignProcessMemory
-            | PlatformFeature::ForeignThreadRegisters
-            | PlatformFeature::CacheCounters => Availability::NotImplemented,
+            #[cfg(any(all(windows, target_arch = "x86_64"), target_os = "linux"))]
+            PlatformFeature::ForeignThreadRegisters => Availability::Supported,
+            #[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "linux")))]
+            PlatformFeature::ForeignThreadRegisters => Availability::NotImplemented,
+            PlatformFeature::ForeignProcessMemory | PlatformFeature::CacheCounters => {
+                Availability::NotImplemented
+            }
             PlatformFeature::CpuMetrics
             | PlatformFeature::DiskStorage
             | PlatformFeature::HardwareRegisters => Availability::NotImplemented,

@@ -2807,6 +2807,7 @@ dependencies = [
 name = "u-monitor-platform"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "sysinfo",
  "u-monitor-core",
  "windows",

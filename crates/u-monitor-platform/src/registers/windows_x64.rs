@@ -7,7 +7,7 @@ use u_monitor_core::{
 use windows::Win32::System::Diagnostics::Debug::{CONTEXT, CONTEXT_FULL_AMD64, RtlCaptureContext};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 
-fn measured<T>(value: T) -> PlatformResult<T> {
+pub(super) fn measured<T>(value: T) -> PlatformResult<T> {
     PlatformResult::Success(Measurement {
         value,
         source: DataSource::Measured,
@@ -27,18 +27,7 @@ fn reg16(name: &str, bits: u16) -> RegisterValue {
     RegisterValue::new(name, u64::from(bits), 16)
 }
 
-pub(super) fn capture() -> PlatformResult<RegisterSnapshot> {
-    let mut context = CONTEXT {
-        ContextFlags: CONTEXT_FULL_AMD64,
-        ..Default::default()
-    };
-    // SAFETY: RtlCaptureContext writes a complete CONTEXT for the calling thread.
-    unsafe {
-        RtlCaptureContext(&mut context);
-    }
-    // SAFETY: GetCurrentThreadId is a pure kernel32 query with no pointer args.
-    let thread_id = u64::from(unsafe { GetCurrentThreadId() });
-
+pub(super) fn context_to_snapshot(context: &CONTEXT, thread_id: u64) -> RegisterSnapshot {
     let registers = vec![
         reg("RAX", context.Rax),
         reg("RBX", context.Rbx),
@@ -65,12 +54,26 @@ pub(super) fn capture() -> PlatformResult<RegisterSnapshot> {
         reg16("GS", context.SegGs),
         reg16("SS", context.SegSs),
     ];
-
-    measured(RegisterSnapshot {
+    RegisterSnapshot {
         architecture: RegisterArchitecture::X86_64,
         thread_id: measured(thread_id),
         registers,
-    })
+    }
+}
+
+pub(super) fn capture() -> PlatformResult<RegisterSnapshot> {
+    // CONTEXT must be 16-byte aligned for RtlCaptureContext on x64.
+    let mut context = Box::new(CONTEXT {
+        ContextFlags: CONTEXT_FULL_AMD64,
+        ..Default::default()
+    });
+    // SAFETY: RtlCaptureContext writes a complete CONTEXT for the calling thread.
+    unsafe {
+        RtlCaptureContext(context.as_mut());
+    }
+    // SAFETY: GetCurrentThreadId is a pure kernel32 query with no pointer args.
+    let thread_id = u64::from(unsafe { GetCurrentThreadId() });
+    measured(context_to_snapshot(context.as_ref(), thread_id))
 }
 
 #[cfg(test)]

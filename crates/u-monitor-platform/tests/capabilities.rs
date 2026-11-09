@@ -63,4 +63,36 @@ fn native_capability_matrix_matches_host_limits() {
         adapter.check_availability(PlatformFeature::CurrentThreadRegisters),
         Availability::NotImplemented
     );
+
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        assert_eq!(
+            adapter.check_availability(PlatformFeature::ProcessEnumeration),
+            Availability::Supported
+        );
+        assert_eq!(
+            adapter.check_availability(PlatformFeature::ThreadEnumeration),
+            Availability::Supported
+        );
+    }
+
+    #[cfg(any(all(windows, target_arch = "x86_64"), target_os = "linux"))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::ForeignThreadRegisters),
+        Availability::Supported
+    );
+    #[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "linux")))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::ForeignThreadRegisters),
+        Availability::NotImplemented
+    );
+
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::ForeignProcessMemory),
+        Availability::NotImplemented
+    );
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::NotImplemented
+    );
 }

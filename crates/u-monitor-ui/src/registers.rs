@@ -5,6 +5,7 @@ use u_monitor_core::{DataSource, PlatformResult, RegisterSnapshot, RegisterValue
 pub(crate) struct RegistersPanel {
     snapshot: PlatformResult<RegisterSnapshot>,
     previous: Option<RegisterSnapshot>,
+    pub(crate) debug_consent: bool,
 }
 
 impl RegistersPanel {
@@ -12,19 +13,35 @@ impl RegistersPanel {
         Self {
             snapshot,
             previous: None,
+            debug_consent: false,
         }
     }
 
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
+        other_thread: bool,
         refresh: &dyn Fn() -> PlatformResult<RegisterSnapshot>,
     ) {
-        ui.label(
-            "Снимок регистров относится только к текущему потоку UI. Чтение регистров других потоков требует отладочных API и отдельно не реализовано.",
-        );
+        if other_thread {
+            ui.label(
+                "Выбран другой поток. Захват остановит поток через debug API (SuspendThread / ptrace). SIMULATED значения не используются.",
+            );
+            ui.checkbox(
+                &mut self.debug_consent,
+                "Я понимаю, что поток будет временно остановлен",
+            );
+        } else {
+            ui.label(
+                "Снимок регистров текущего потока UI (MEASURED). Для другого потока выберите tid на странице «Процессы» и дайте согласие.",
+            );
+        }
         ui.add_space(8.0);
-        if ui.button("Обновить снимок").clicked() {
+        let can_refresh = !other_thread || self.debug_consent;
+        if ui
+            .add_enabled(can_refresh, egui::Button::new("Обновить снимок"))
+            .clicked()
+        {
             if let PlatformResult::Success(current) = &self.snapshot {
                 self.previous = Some(current.value.clone());
             }
@@ -158,7 +175,9 @@ mod tests {
         }));
         let output = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                panel.show(ui, &|| PlatformResult::NotImplemented("unused".into()));
+                panel.show(ui, false, &|| {
+                    PlatformResult::NotImplemented("unused".into())
+                });
             });
         });
         assert!(!output.shapes.is_empty());

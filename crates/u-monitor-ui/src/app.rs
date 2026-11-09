@@ -114,6 +114,7 @@ pub(crate) struct MonitorApp {
     simulation: SimulationPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
+    thread_registers: Box<dyn Fn(u64, u64) -> PlatformResult<RegisterSnapshot>>,
     refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
     list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
 }
@@ -134,6 +135,7 @@ impl MonitorApp {
         target: InspectionTarget,
         read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
         refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
+        thread_registers: Box<dyn Fn(u64, u64) -> PlatformResult<RegisterSnapshot>>,
         refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
         list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
     ) -> Self {
@@ -158,6 +160,7 @@ impl MonitorApp {
             simulation: SimulationPanel::new(),
             read_memory,
             refresh_registers,
+            thread_registers,
             refresh_processes,
             list_threads,
         }
@@ -235,21 +238,19 @@ impl MonitorApp {
                         }
                     }
                     Page::Registers => {
-                        let target = self.processes.target();
-                        if !target.is_current_process() {
-                            ui.monospace("NOT_IMPLEMENTED");
-                            ui.label(
-                                "Регистры чужого процесса ещё не реализованы. Значения не симулируются.",
-                            );
-                        } else if target.thread.is_some() {
-                            ui.monospace("NOT_IMPLEMENTED");
-                            ui.label(
-                                "Регистры другого потока требуют debug-API и явного согласия (следующий этап). Сейчас доступен только снимок текущего потока UI без выбранного tid.",
-                            );
-                        } else {
-                            let refresh = self.refresh_registers.as_ref();
-                            self.registers.show(ui, refresh);
-                        }
+                        let target = self.processes.target().clone();
+                        let other_thread = target.thread.is_some();
+                        let pid = target.process.pid;
+                        let tid = target.thread.as_ref().map(|thread| thread.tid);
+                        let refresh_current = self.refresh_registers.as_ref();
+                        let refresh_thread = self.thread_registers.as_ref();
+                        self.registers.show(ui, other_thread, &|| {
+                            if let Some(tid) = tid {
+                                refresh_thread(pid, tid)
+                            } else {
+                                refresh_current()
+                            }
+                        });
                     }
                     Page::Cache => cache::show(ui, &self.cache),
                     Page::Simulation => self.simulation.show(ui),
@@ -302,6 +303,9 @@ mod tests {
             simulation: SimulationPanel::new(),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
+            thread_registers: Box::new(|_, _| {
+                PlatformResult::NotImplemented("test fixture".into())
+            }),
             refresh_processes: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
             list_threads: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
         }

@@ -80,6 +80,7 @@ fn main() -> eframe::Result {
                 target,
                 Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
                 Box::new(|| NativePlatformAdapter.current_thread_registers()),
+                Box::new(|pid, tid| NativePlatformAdapter.thread_registers(pid, tid)),
                 Box::new(|| NativePlatformAdapter.list_processes()),
                 Box::new(|pid| NativePlatformAdapter.list_threads(pid)),
             )))

@@ -21,10 +21,13 @@ Ubuntu, Windows и macOS. Ограничения backend по OS/arch видны
 | Virtual memory map + HEX | да | да | нет |
 | Cache topology | да | да | нет |
 | Current-thread registers | x86_64 | нет | нет |
+| Other-thread registers (consent) | x86_64 | да (ptrace x86_64/aarch64) | нет |
 | Simulation (L1/L2/RAM) | да (SIMULATED) | да | да |
 
 \* через `sysinfo`, где host поддерживается. Живая нагрузка CPU идёт через
 `NativeTelemetryAdapter`, а не через `PlatformFeature::CpuMetrics`.
+Чужой поток на странице «Регистры» требует явного согласия; без прав —
+`PERMISSION_REQUIRED`, без SIMULATED.
 
 ```powershell
 rustup show
