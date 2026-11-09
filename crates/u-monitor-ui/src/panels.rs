@@ -81,6 +81,7 @@ pub(crate) fn overview(
                             | Page::Registers
                             | Page::Cache
                             | Page::Simulation
+                            | Page::Processes
                     ) {
                         "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                     } else {
@@ -89,6 +90,9 @@ pub(crate) fn overview(
                 );
             });
             ui.label(match page {
+                Page::Processes => {
+                    "MEASURED список процессов/потоков и выбор цели для Memory/Registers."
+                }
                 Page::Cpu => "Топология CPU при запуске и живая нагрузка логических процессоров.",
                 Page::Storage => {
                     "Смонтированные тома, файловые системы и доступное пространство по данным ОС."

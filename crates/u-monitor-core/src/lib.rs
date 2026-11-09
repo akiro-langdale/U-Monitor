@@ -3,6 +3,7 @@
 mod cache;
 mod cpu;
 mod memory;
+mod process;
 mod ram;
 mod registers;
 mod storage;
@@ -14,6 +15,7 @@ pub use memory::{
     MemoryBytes, MemoryProtection, MemoryReadRequest, MemoryRegionKind, MemoryState,
     VirtualMemoryRegion,
 };
+pub use process::{InspectionTarget, ProcessId, ProcessInfo, ThreadId, ThreadInfo};
 pub use ram::RamInfo;
 pub use registers::{RegisterArchitecture, RegisterSnapshot, RegisterValue};
 pub use storage::{StorageKind, StorageVolume, VolumeSpace};
@@ -135,11 +137,16 @@ pub enum PlatformFeature {
     HardwareRegisters,
     CurrentThreadRegisters,
     CacheTopology,
+    ProcessEnumeration,
+    ThreadEnumeration,
+    ForeignProcessMemory,
+    ForeignThreadRegisters,
+    CacheCounters,
 }
 
 impl PlatformFeature {
     /// Stable order for capability matrices and overview UI.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 16] = [
         Self::SystemIdentity,
         Self::CpuDiscovery,
         Self::CpuMetrics,
@@ -151,6 +158,11 @@ impl PlatformFeature {
         Self::HardwareRegisters,
         Self::CurrentThreadRegisters,
         Self::CacheTopology,
+        Self::ProcessEnumeration,
+        Self::ThreadEnumeration,
+        Self::ForeignProcessMemory,
+        Self::ForeignThreadRegisters,
+        Self::CacheCounters,
     ];
 }
 
@@ -168,6 +180,11 @@ impl fmt::Display for PlatformFeature {
             Self::HardwareRegisters => "HardwareRegisters",
             Self::CurrentThreadRegisters => "CurrentThreadRegisters",
             Self::CacheTopology => "CacheTopology",
+            Self::ProcessEnumeration => "ProcessEnumeration",
+            Self::ThreadEnumeration => "ThreadEnumeration",
+            Self::ForeignProcessMemory => "ForeignProcessMemory",
+            Self::ForeignThreadRegisters => "ForeignThreadRegisters",
+            Self::CacheCounters => "CacheCounters",
         })
     }
 }
@@ -215,6 +232,28 @@ pub trait PlatformAdapter {
     /// Discovers cache hierarchy metadata (sizes, levels, sharing). Never cache contents.
     fn cache_topology(&self) -> PlatformResult<CacheTopology> {
         PlatformResult::NotImplemented("Cache topology discovery is not implemented".into())
+    }
+
+    /// Lists OS-visible processes. Does not open handles for foreign memory reads.
+    fn list_processes(&self) -> PlatformResult<Vec<ProcessInfo>> {
+        PlatformResult::NotImplemented("Process enumeration is not implemented".into())
+    }
+
+    /// Lists threads of one process when the OS exposes them to this user.
+    fn list_threads(&self, process_id: ProcessId) -> PlatformResult<Vec<ThreadInfo>> {
+        let _ = process_id;
+        PlatformResult::NotImplemented("Thread enumeration is not implemented".into())
+    }
+
+    /// Captures registers of a specific thread after explicit user consent.
+    /// Without consent the UI must not call this. Access denied → PermissionRequired.
+    fn thread_registers(
+        &self,
+        process_id: ProcessId,
+        thread_id: ThreadId,
+    ) -> PlatformResult<RegisterSnapshot> {
+        let _ = (process_id, thread_id);
+        PlatformResult::NotImplemented("Other-thread register capture is not implemented".into())
     }
 
     /// Discovers OS-reported CPU models and topology without sampling CPU load.

@@ -2,6 +2,7 @@
 mod cache;
 mod cpu;
 mod cpu_metrics;
+mod process;
 mod ram;
 mod registers;
 mod storage;
@@ -16,7 +17,8 @@ use std::time::SystemTime;
 use u_monitor_core::{
     Architecture, Availability, CacheTopology, CpuInfo, CpuMetrics, DataSource, Measurement,
     MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
-    PlatformResult, RamInfo, RegisterSnapshot, StorageVolume, SystemIdentity, VirtualMemoryRegion,
+    PlatformResult, ProcessId, ProcessInfo, RamInfo, RegisterSnapshot, StorageVolume,
+    SystemIdentity, ThreadInfo, VirtualMemoryRegion,
 };
 
 /// Stateful CPU and RAM sampling adapter owned exclusively by a collector.
@@ -89,6 +91,14 @@ impl PlatformAdapter for NativePlatformAdapter {
         cache::discover()
     }
 
+    fn list_processes(&self) -> PlatformResult<Vec<ProcessInfo>> {
+        process::list_processes()
+    }
+
+    fn list_threads(&self, process_id: ProcessId) -> PlatformResult<Vec<ThreadInfo>> {
+        process::list_threads(process_id)
+    }
+
     fn name(&self) -> &'static str {
         "Native Platform Adapter"
     }
@@ -133,6 +143,17 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::CacheTopology => Availability::Supported,
             #[cfg(not(any(windows, target_os = "linux")))]
             PlatformFeature::CacheTopology => Availability::NotImplemented,
+            #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+            PlatformFeature::ProcessEnumeration => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+            PlatformFeature::ProcessEnumeration => Availability::NotImplemented,
+            #[cfg(any(windows, target_os = "linux"))]
+            PlatformFeature::ThreadEnumeration => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux")))]
+            PlatformFeature::ThreadEnumeration => Availability::NotImplemented,
+            PlatformFeature::ForeignProcessMemory
+            | PlatformFeature::ForeignThreadRegisters
+            | PlatformFeature::CacheCounters => Availability::NotImplemented,
             PlatformFeature::CpuMetrics
             | PlatformFeature::DiskStorage
             | PlatformFeature::HardwareRegisters => Availability::NotImplemented,

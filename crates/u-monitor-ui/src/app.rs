@@ -1,6 +1,6 @@
 use crate::{
-    cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, registers::RegistersPanel,
-    simulation::SimulationPanel, storage,
+    cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, processes::ProcessesPanel,
+    registers::RegistersPanel, simulation::SimulationPanel, storage,
 };
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
@@ -16,13 +16,15 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    Availability, CacheTopology, CpuInfo, MemoryBytes, MemoryReadRequest, PlatformFeature,
-    PlatformResult, RegisterSnapshot, StorageVolume, SystemIdentity, VirtualMemoryRegion,
+    Availability, CacheTopology, CpuInfo, InspectionTarget, MemoryBytes, MemoryReadRequest,
+    PlatformFeature, PlatformResult, ProcessInfo, RegisterSnapshot, StorageVolume, SystemIdentity,
+    ThreadInfo, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Page {
     Overview,
+    Processes,
     Cpu,
     Ram,
     Memory,
@@ -33,8 +35,9 @@ pub(crate) enum Page {
 }
 
 impl Page {
-    pub(crate) const ALL: [Self; 8] = [
+    pub(crate) const ALL: [Self; 9] = [
         Self::Overview,
+        Self::Processes,
         Self::Cpu,
         Self::Ram,
         Self::Memory,
@@ -46,6 +49,7 @@ impl Page {
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Overview => "Обзор",
+            Self::Processes => "Процессы",
             Self::Cpu => "CPU",
             Self::Ram => "RAM",
             Self::Memory => "Память",
@@ -58,11 +62,12 @@ impl Page {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Overview => "Система и доступность разделов",
+            Self::Processes => "Список процессов/потоков и цель инспекции",
             Self::Cpu => "Топология CPU и живая нагрузка",
             Self::Ram => "Статистика оперативной памяти",
-            Self::Memory => "Виртуальные регионы и HEX текущего процесса",
+            Self::Memory => "Виртуальные регионы и HEX выбранной цели",
             Self::Storage => "Тома, файловые системы и пространство",
-            Self::Registers => "Регистры текущего потока UI",
+            Self::Registers => "Регистры выбранного потока",
             Self::Cache => "Характеристики и иерархия кэшей",
             Self::Simulation => "Отдельные модели иерархии памяти",
         }
@@ -70,6 +75,9 @@ impl Page {
     pub(crate) fn pending(self) -> &'static str {
         match self {
             Self::Overview => "",
+            Self::Processes => {
+                "Панель процессов подключена: MEASURED enumeration и выбор цели инспекции."
+            }
             Self::Cpu => "Панель CPU подключена: топология при запуске и живая нагрузка.",
             Self::Ram => "Панель RAM подключена: снимки, интервал и история использования.",
             Self::Memory => {
@@ -99,12 +107,15 @@ pub(crate) struct MonitorApp {
     cpu: PlatformResult<CpuInfo>,
     storage: PlatformResult<Vec<StorageVolume>>,
     live: LiveTelemetry,
+    processes: ProcessesPanel,
     memory: MemoryPanel,
     registers: RegistersPanel,
     cache: PlatformResult<CacheTopology>,
     simulation: SimulationPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
+    refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
+    list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
 }
 
 impl MonitorApp {
@@ -119,8 +130,12 @@ impl MonitorApp {
         regions: PlatformResult<Vec<VirtualMemoryRegion>>,
         registers: PlatformResult<RegisterSnapshot>,
         cache: PlatformResult<CacheTopology>,
+        processes: PlatformResult<Vec<ProcessInfo>>,
+        target: InspectionTarget,
         read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
         refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
+        refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
+        list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -136,12 +151,15 @@ impl MonitorApp {
             cpu,
             storage,
             live,
+            processes: ProcessesPanel::new(processes, target),
             memory: MemoryPanel::new(regions),
             registers: RegistersPanel::new(registers),
             cache,
             simulation: SimulationPanel::new(),
             read_memory,
             refresh_registers,
+            refresh_processes,
+            list_threads,
         }
     }
 
@@ -187,7 +205,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 12 · Simulation").small().weak());
+                ui.label(egui::RichText::new("Processes → Quality").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -197,16 +215,41 @@ impl MonitorApp {
                 ui.add_space(20.0);
                 match self.page {
                     Page::Overview => panels::overview(ui, &self.identity, &self.capabilities),
+                    Page::Processes => {
+                        let refresh = self.refresh_processes.as_ref();
+                        let threads = self.list_threads.as_ref();
+                        self.processes.show(ui, refresh, threads);
+                    }
                     Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
                     Page::Storage => storage::show(ui, &self.storage),
                     Page::Ram => self.live.show_ram(ui),
                     Page::Memory => {
-                        let read_memory = self.read_memory.as_ref();
-                        self.memory.show(ui, read_memory);
+                        if self.processes.target().is_current_process() {
+                            let read_memory = self.read_memory.as_ref();
+                            self.memory.show(ui, read_memory);
+                        } else {
+                            ui.monospace("NOT_IMPLEMENTED");
+                            ui.label(
+                                "Чтение памяти чужого процесса ещё не подключено. Debug/open-process API появится позже; SIMULATED данные сюда не подставляются.",
+                            );
+                        }
                     }
                     Page::Registers => {
-                        let refresh = self.refresh_registers.as_ref();
-                        self.registers.show(ui, refresh);
+                        let target = self.processes.target();
+                        if !target.is_current_process() {
+                            ui.monospace("NOT_IMPLEMENTED");
+                            ui.label(
+                                "Регистры чужого процесса ещё не реализованы. Значения не симулируются.",
+                            );
+                        } else if target.thread.is_some() {
+                            ui.monospace("NOT_IMPLEMENTED");
+                            ui.label(
+                                "Регистры другого потока требуют debug-API и явного согласия (следующий этап). Сейчас доступен только снимок текущего потока UI без выбранного tid.",
+                            );
+                        } else {
+                            let refresh = self.refresh_registers.as_ref();
+                            self.registers.show(ui, refresh);
+                        }
                     }
                     Page::Cache => cache::show(ui, &self.cache),
                     Page::Simulation => self.simulation.show(ui),
@@ -249,12 +292,18 @@ mod tests {
             cpu: PlatformResult::NotImplemented("test fixture".into()),
             storage: PlatformResult::NotImplemented("test fixture".into()),
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
+            processes: ProcessesPanel::new(
+                PlatformResult::NotImplemented("test fixture".into()),
+                InspectionTarget::current_process(0, "u-monitor"),
+            ),
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             cache: PlatformResult::NotImplemented("test fixture".into()),
             simulation: SimulationPanel::new(),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
+            refresh_processes: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
+            list_threads: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
         }
     }
 

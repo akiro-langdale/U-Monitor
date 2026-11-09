@@ -4,6 +4,7 @@ mod cpu;
 mod live;
 mod memory;
 mod panels;
+mod processes;
 mod ram;
 mod registers;
 mod simulation;
@@ -13,7 +14,7 @@ use app::MonitorApp;
 use eframe::egui;
 use live::LiveTelemetry;
 use std::time::Duration;
-use u_monitor_core::{PlatformAdapter, PlatformFeature};
+use u_monitor_core::{InspectionTarget, PlatformAdapter, PlatformFeature};
 use u_monitor_platform::{NativePlatformAdapter, NativeTelemetryAdapter};
 use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
@@ -29,6 +30,22 @@ fn main() -> eframe::Result {
     let regions = NativePlatformAdapter.virtual_memory_regions();
     let registers = NativePlatformAdapter.current_thread_registers();
     let cache = NativePlatformAdapter.cache_topology();
+    let processes = NativePlatformAdapter.list_processes();
+    let target = match &processes {
+        u_monitor_core::PlatformResult::Success(list) => list
+            .value
+            .iter()
+            .find(|process| process.is_current)
+            .cloned()
+            .map(|process| InspectionTarget {
+                process,
+                thread: None,
+            })
+            .unwrap_or_else(|| {
+                InspectionTarget::current_process(std::process::id() as u64, "u-monitor")
+            }),
+        _ => InspectionTarget::current_process(std::process::id() as u64, "u-monitor"),
+    };
     let live = LiveTelemetry::new(TelemetryWorker::start(
         NativeTelemetryAdapter::default(),
         WorkerConfig {
@@ -59,8 +76,12 @@ fn main() -> eframe::Result {
                 regions,
                 registers,
                 cache,
+                processes,
+                target,
                 Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
                 Box::new(|| NativePlatformAdapter.current_thread_registers()),
+                Box::new(|| NativePlatformAdapter.list_processes()),
+                Box::new(|pid| NativePlatformAdapter.list_threads(pid)),
             )))
         }),
     )
