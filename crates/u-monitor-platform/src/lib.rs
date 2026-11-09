@@ -157,11 +157,11 @@ impl PlatformAdapter for NativePlatformAdapter {
                     Availability::Unavailable
                 }
             }
-            #[cfg(any(windows, target_os = "linux"))]
+            #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
             PlatformFeature::VirtualMemoryMap | PlatformFeature::MemoryBytes => {
                 Availability::Supported
             }
-            #[cfg(not(any(windows, target_os = "linux")))]
+            #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
             PlatformFeature::VirtualMemoryMap | PlatformFeature::MemoryBytes => {
                 Availability::NotImplemented
             }
@@ -192,9 +192,9 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::CacheCounters => Availability::Unavailable,
             #[cfg(not(any(windows, target_os = "linux")))]
             PlatformFeature::CacheCounters => Availability::NotImplemented,
-            #[cfg(any(windows, target_os = "linux"))]
+            #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
             PlatformFeature::DiskStorage => Availability::Supported,
-            #[cfg(not(any(windows, target_os = "linux")))]
+            #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
             PlatformFeature::DiskStorage => Availability::NotImplemented,
             PlatformFeature::CpuMetrics | PlatformFeature::HardwareRegisters => {
                 Availability::NotImplemented

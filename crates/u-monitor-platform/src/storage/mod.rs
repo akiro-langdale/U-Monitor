@@ -2,6 +2,9 @@
 mod file_hex;
 mod io_rates;
 
+#[cfg(target_os = "macos")]
+mod macos_disks;
+
 pub use file_hex::MAX_FILE_SAMPLE_BYTES;
 pub(crate) use file_hex::read_file_bytes;
 pub(crate) use io_rates::DiskIoSampler;

@@ -20,18 +20,18 @@ fn native_capability_matrix_matches_host_limits() {
         );
     }
 
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     assert_eq!(
         adapter.check_availability(PlatformFeature::DiskStorage),
         Availability::Supported
     );
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     assert_eq!(
         adapter.check_availability(PlatformFeature::DiskStorage),
         Availability::NotImplemented
     );
 
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     {
         assert_eq!(
             adapter.check_availability(PlatformFeature::VirtualMemoryMap),
@@ -39,15 +39,17 @@ fn native_capability_matrix_matches_host_limits() {
         );
         assert_eq!(
             adapter.check_availability(PlatformFeature::MemoryBytes),
-            Availability::Supported
-        );
-        assert_eq!(
-            adapter.check_availability(PlatformFeature::CacheTopology),
             Availability::Supported
         );
     }
 
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(any(windows, target_os = "linux"))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheTopology),
+        Availability::Supported
+    );
+
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         assert_eq!(
             adapter.check_availability(PlatformFeature::VirtualMemoryMap),
@@ -57,11 +59,13 @@ fn native_capability_matrix_matches_host_limits() {
             adapter.check_availability(PlatformFeature::MemoryBytes),
             Availability::NotImplemented
         );
-        assert_eq!(
-            adapter.check_availability(PlatformFeature::CacheTopology),
-            Availability::NotImplemented
-        );
     }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheTopology),
+        Availability::NotImplemented
+    );
 
     #[cfg(all(windows, target_arch = "x86_64"))]
     assert_eq!(

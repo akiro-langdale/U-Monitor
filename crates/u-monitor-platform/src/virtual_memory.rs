@@ -5,6 +5,9 @@ mod windows;
 #[cfg(target_os = "linux")]
 mod linux;
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 // Parsed on all targets so unit tests cover Linux maps format under Windows CI.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod maps_parse;
@@ -23,10 +26,14 @@ pub(crate) fn discover_regions() -> PlatformResult<Vec<VirtualMemoryRegion>> {
     {
         linux::enumerate_regions()
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::enumerate_regions()
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         PlatformResult::NotImplemented(
-            "Virtual memory map is implemented for Windows and Linux in this version".into(),
+            "Virtual memory map is implemented for Windows, Linux and macOS in this version".into(),
         )
     }
 }
@@ -40,11 +47,15 @@ pub(crate) fn read_bytes(request: MemoryReadRequest) -> PlatformResult<MemoryByt
     {
         linux::read_bytes(request)
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::read_bytes(request)
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         let _ = request;
         PlatformResult::NotImplemented(
-            "Current-process memory reads are implemented for Windows and Linux in this version"
+            "Current-process memory reads are implemented for Windows, Linux and macOS in this version"
                 .into(),
         )
     }

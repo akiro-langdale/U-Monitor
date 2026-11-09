@@ -19,7 +19,7 @@ Ubuntu, Windows и macOS. Ограничения backend по OS/arch видны
 | --- | --- | --- | --- |
 | SystemIdentity / CPU discovery / RAM / Storage volumes | да | да | да\* |
 | Disk I/O rates + file HEX | да | да | нет |
-| Virtual memory map + HEX | да | да | нет |
+| Virtual memory map + HEX | да | да | да (mach_vm_region) |
 | Cache topology | да | да | нет |
 | Cache counters (PMC/perf) | нет (UNAVAILABLE) | да (perf; могут быть права) | нет |
 | Current-thread registers | x86_64 | нет | нет |
