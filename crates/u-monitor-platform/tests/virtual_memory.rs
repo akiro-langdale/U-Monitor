@@ -22,8 +22,8 @@ fn stub_does_not_invent_virtual_memory_data() {
 }
 
 #[test]
-#[cfg(windows)]
-fn native_windows_map_and_readable_sample_are_measured() {
+#[cfg(any(windows, target_os = "linux"))]
+fn native_map_and_readable_sample_are_measured() {
     let adapter = NativePlatformAdapter;
     assert_eq!(
         adapter.check_availability(PlatformFeature::VirtualMemoryMap),

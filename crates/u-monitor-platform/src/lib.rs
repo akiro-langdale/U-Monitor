@@ -107,11 +107,11 @@ impl PlatformAdapter for NativePlatformAdapter {
                     Availability::Unavailable
                 }
             }
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             PlatformFeature::VirtualMemoryMap | PlatformFeature::MemoryBytes => {
                 Availability::Supported
             }
-            #[cfg(not(windows))]
+            #[cfg(not(any(windows, target_os = "linux")))]
             PlatformFeature::VirtualMemoryMap | PlatformFeature::MemoryBytes => {
                 Availability::NotImplemented
             }
