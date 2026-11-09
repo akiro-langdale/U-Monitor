@@ -30,6 +30,7 @@ fn main() -> eframe::Result {
     let regions = NativePlatformAdapter.virtual_memory_regions();
     let registers = NativePlatformAdapter.current_thread_registers();
     let cache = NativePlatformAdapter.cache_topology();
+    let cache_counters = NativePlatformAdapter.cache_counters();
     let processes = NativePlatformAdapter.list_processes();
     let target = match &processes {
         u_monitor_core::PlatformResult::Success(list) => list
@@ -76,6 +77,7 @@ fn main() -> eframe::Result {
                 regions,
                 registers,
                 cache,
+                cache_counters,
                 processes,
                 target,
                 Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
@@ -83,6 +85,7 @@ fn main() -> eframe::Result {
                 Box::new(|pid, tid| NativePlatformAdapter.thread_registers(pid, tid)),
                 Box::new(|| NativePlatformAdapter.list_processes()),
                 Box::new(|pid| NativePlatformAdapter.list_threads(pid)),
+                Box::new(|| NativePlatformAdapter.cache_counters()),
             )))
         }),
     )

@@ -15,8 +15,8 @@ pub use virtual_memory::MAX_MEMORY_SAMPLE_BYTES;
 
 use std::time::SystemTime;
 use u_monitor_core::{
-    Architecture, Availability, CacheTopology, CpuInfo, CpuMetrics, DataSource, Measurement,
-    MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
+    Architecture, Availability, CacheCounters, CacheTopology, CpuInfo, CpuMetrics, DataSource,
+    Measurement, MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
     PlatformResult, ProcessId, ProcessInfo, RamInfo, RegisterSnapshot, StorageVolume,
     SystemIdentity, ThreadId, ThreadInfo, VirtualMemoryRegion,
 };
@@ -91,6 +91,10 @@ impl PlatformAdapter for NativePlatformAdapter {
         cache::discover()
     }
 
+    fn cache_counters(&self) -> PlatformResult<CacheCounters> {
+        cache::sample_counters()
+    }
+
     fn list_processes(&self) -> PlatformResult<Vec<ProcessInfo>> {
         process::list_processes()
     }
@@ -163,9 +167,13 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::ForeignThreadRegisters => Availability::Supported,
             #[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "linux")))]
             PlatformFeature::ForeignThreadRegisters => Availability::NotImplemented,
-            PlatformFeature::ForeignProcessMemory | PlatformFeature::CacheCounters => {
-                Availability::NotImplemented
-            }
+            PlatformFeature::ForeignProcessMemory => Availability::NotImplemented,
+            #[cfg(target_os = "linux")]
+            PlatformFeature::CacheCounters => Availability::Supported,
+            #[cfg(windows)]
+            PlatformFeature::CacheCounters => Availability::Unavailable,
+            #[cfg(not(any(windows, target_os = "linux")))]
+            PlatformFeature::CacheCounters => Availability::NotImplemented,
             PlatformFeature::CpuMetrics
             | PlatformFeature::DiskStorage
             | PlatformFeature::HardwareRegisters => Availability::NotImplemented,

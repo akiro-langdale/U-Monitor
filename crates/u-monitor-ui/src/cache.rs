@@ -1,8 +1,13 @@
 //! Cache hierarchy metadata panel. Never displays reconstructed cache-line bytes.
 use eframe::egui;
-use u_monitor_core::{CacheTopology, DataSource, PlatformResult};
+use u_monitor_core::{CacheCounters, CacheTopology, DataSource, PlatformResult};
 
-pub(crate) fn show(ui: &mut egui::Ui, topology: &PlatformResult<CacheTopology>) {
+pub(crate) fn show(
+    ui: &mut egui::Ui,
+    topology: &PlatformResult<CacheTopology>,
+    counters: &mut PlatformResult<CacheCounters>,
+    refresh_counters: &dyn Fn() -> PlatformResult<CacheCounters>,
+) {
     ui.label(
         "Показаны только характеристики иерархии кэша (уровень, размер, линия, ассоциативность, разделение). Содержимое кэш-линий недоступно и не симулируется здесь.",
     );
@@ -65,6 +70,61 @@ pub(crate) fn show(ui: &mut egui::Ui, topology: &PlatformResult<CacheTopology>) 
             ui.colored_label(ui.visuals().error_fg_color, e.to_string());
         }
     }
+
+    ui.add_space(16.0);
+    ui.heading("Счётчики кэша (hardware)");
+    ui.label(
+        "Короткое окно PMC/perf для references/misses текущего процесса. SIMULATED значения не подставляются.",
+    );
+    if ui.button("Сэмплировать счётчики").clicked() {
+        *counters = refresh_counters();
+    }
+    ui.add_space(4.0);
+    ui.monospace(counters.availability().to_string());
+    match counters {
+        PlatformResult::Success(measurement) => {
+            ui.monospace(match measurement.source {
+                DataSource::Measured => "MEASURED",
+                DataSource::Calculated => "CALCULATED",
+                DataSource::Simulated => "SIMULATED",
+            });
+            ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
+            egui::Grid::new("cache_counters_grid")
+                .striped(true)
+                .spacing([14.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("References");
+                    ui.monospace(format_counter(&measurement.value.references));
+                    ui.end_row();
+                    ui.label("Misses");
+                    ui.monospace(format_counter(&measurement.value.misses));
+                    ui.end_row();
+                    ui.label("Window");
+                    ui.monospace(match &measurement.value.window_nanos {
+                        PlatformResult::Success(window) => {
+                            format!("{:.1} ms", window.value as f64 / 1_000_000.0)
+                        }
+                        other => other.availability().to_string(),
+                    });
+                    ui.end_row();
+                });
+        }
+        PlatformResult::PermissionRequired(r)
+        | PlatformResult::Unavailable(r)
+        | PlatformResult::NotImplemented(r) => {
+            ui.label(r.as_str());
+        }
+        PlatformResult::Error(e) => {
+            ui.colored_label(ui.visuals().error_fg_color, e.to_string());
+        }
+    }
+}
+
+fn format_counter(value: &PlatformResult<u64>) -> String {
+    match value {
+        PlatformResult::Success(measurement) => measurement.value.to_string(),
+        other => other.availability().to_string(),
+    }
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -115,8 +175,13 @@ mod tests {
             source: DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         });
+        let mut counters = PlatformResult::Unavailable("not sampled".into());
         let output = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| show(ui, &topology));
+            egui::CentralPanel::default().show(ctx, |ui| {
+                show(ui, &topology, &mut counters, &|| {
+                    PlatformResult::NotImplemented("unused".into())
+                })
+            });
         });
         assert!(!output.shapes.is_empty());
     }

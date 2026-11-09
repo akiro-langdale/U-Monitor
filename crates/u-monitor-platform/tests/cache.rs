@@ -8,8 +8,16 @@ fn stub_does_not_invent_cache_topology() {
         adapter.check_availability(PlatformFeature::CacheTopology),
         Availability::NotImplemented
     );
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::NotImplemented
+    );
     assert!(matches!(
         adapter.cache_topology(),
+        PlatformResult::NotImplemented(_)
+    ));
+    assert!(matches!(
+        adapter.cache_counters(),
         PlatformResult::NotImplemented(_)
     ));
 }
@@ -35,5 +43,48 @@ fn native_cache_topology_is_measured() {
         if let Some(line) = node.line_size_bytes {
             assert!(line > 0);
         }
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn native_windows_cache_counters_are_unavailable_not_simulated() {
+    let adapter = NativePlatformAdapter;
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::Unavailable
+    );
+    assert!(matches!(
+        adapter.cache_counters(),
+        PlatformResult::Unavailable(_)
+    ));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn native_linux_cache_counters_are_measured_permissioned_or_unavailable() {
+    let adapter = NativePlatformAdapter;
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::Supported
+    );
+    match adapter.cache_counters() {
+        PlatformResult::Success(counters) => {
+            assert_eq!(counters.source, DataSource::Measured);
+            assert!(matches!(
+                counters.value.references,
+                PlatformResult::Success(_)
+                    | PlatformResult::Unavailable(_)
+                    | PlatformResult::PermissionRequired(_)
+            ));
+            assert!(matches!(
+                counters.value.misses,
+                PlatformResult::Success(_)
+                    | PlatformResult::Unavailable(_)
+                    | PlatformResult::PermissionRequired(_)
+            ));
+        }
+        PlatformResult::PermissionRequired(_) | PlatformResult::Unavailable(_) => {}
+        other => panic!("unexpected cache counters result: {other:?}"),
     }
 }

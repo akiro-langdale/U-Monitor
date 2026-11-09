@@ -16,9 +16,9 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    Availability, CacheTopology, CpuInfo, InspectionTarget, MemoryBytes, MemoryReadRequest,
-    PlatformFeature, PlatformResult, ProcessInfo, RegisterSnapshot, StorageVolume, SystemIdentity,
-    ThreadInfo, VirtualMemoryRegion,
+    Availability, CacheCounters, CacheTopology, CpuInfo, InspectionTarget, MemoryBytes,
+    MemoryReadRequest, PlatformFeature, PlatformResult, ProcessInfo, RegisterSnapshot,
+    StorageVolume, SystemIdentity, ThreadInfo, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,12 +111,14 @@ pub(crate) struct MonitorApp {
     memory: MemoryPanel,
     registers: RegistersPanel,
     cache: PlatformResult<CacheTopology>,
+    cache_counters: PlatformResult<CacheCounters>,
     simulation: SimulationPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
     thread_registers: Box<dyn Fn(u64, u64) -> PlatformResult<RegisterSnapshot>>,
     refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
     list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
+    refresh_cache_counters: Box<dyn Fn() -> PlatformResult<CacheCounters>>,
 }
 
 impl MonitorApp {
@@ -131,6 +133,7 @@ impl MonitorApp {
         regions: PlatformResult<Vec<VirtualMemoryRegion>>,
         registers: PlatformResult<RegisterSnapshot>,
         cache: PlatformResult<CacheTopology>,
+        cache_counters: PlatformResult<CacheCounters>,
         processes: PlatformResult<Vec<ProcessInfo>>,
         target: InspectionTarget,
         read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
@@ -138,6 +141,7 @@ impl MonitorApp {
         thread_registers: Box<dyn Fn(u64, u64) -> PlatformResult<RegisterSnapshot>>,
         refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
         list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
+        refresh_cache_counters: Box<dyn Fn() -> PlatformResult<CacheCounters>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -157,12 +161,14 @@ impl MonitorApp {
             memory: MemoryPanel::new(regions),
             registers: RegistersPanel::new(registers),
             cache,
+            cache_counters,
             simulation: SimulationPanel::new(),
             read_memory,
             refresh_registers,
             thread_registers,
             refresh_processes,
             list_threads,
+            refresh_cache_counters,
         }
     }
 
@@ -252,7 +258,10 @@ impl MonitorApp {
                             }
                         });
                     }
-                    Page::Cache => cache::show(ui, &self.cache),
+                    Page::Cache => {
+                        let refresh = self.refresh_cache_counters.as_ref();
+                        cache::show(ui, &self.cache, &mut self.cache_counters, refresh);
+                    }
                     Page::Simulation => self.simulation.show(ui),
                 }
             });
@@ -300,6 +309,7 @@ mod tests {
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             cache: PlatformResult::NotImplemented("test fixture".into()),
+            cache_counters: PlatformResult::NotImplemented("test fixture".into()),
             simulation: SimulationPanel::new(),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
@@ -308,6 +318,9 @@ mod tests {
             }),
             refresh_processes: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
             list_threads: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
+            refresh_cache_counters: Box::new(|| {
+                PlatformResult::NotImplemented("test fixture".into())
+            }),
         }
     }
 

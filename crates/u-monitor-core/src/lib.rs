@@ -9,7 +9,7 @@ mod registers;
 mod storage;
 mod system;
 
-pub use cache::{CacheKind, CacheNode, CacheTopology};
+pub use cache::{CacheCounters, CacheKind, CacheNode, CacheTopology};
 pub use cpu::{CpuInfo, CpuMetrics, CpuUsagePercent, LogicalCpuUsage};
 pub use memory::{
     MemoryBytes, MemoryProtection, MemoryReadRequest, MemoryRegionKind, MemoryState,
@@ -232,6 +232,12 @@ pub trait PlatformAdapter {
     /// Discovers cache hierarchy metadata (sizes, levels, sharing). Never cache contents.
     fn cache_topology(&self) -> PlatformResult<CacheTopology> {
         PlatformResult::NotImplemented("Cache topology discovery is not implemented".into())
+    }
+
+    /// Samples hardware cache references/misses when the OS exposes PMC/perf access.
+    /// Never invents zeros or fills from the educational simulation.
+    fn cache_counters(&self) -> PlatformResult<CacheCounters> {
+        PlatformResult::NotImplemented("Hardware cache counters are not implemented".into())
     }
 
     /// Lists OS-visible processes. Does not open handles for foreign memory reads.

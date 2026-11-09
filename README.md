@@ -20,6 +20,7 @@ Ubuntu, Windows и macOS. Ограничения backend по OS/arch видны
 | SystemIdentity / CPU discovery / RAM / Storage | да | да | да\* |
 | Virtual memory map + HEX | да | да | нет |
 | Cache topology | да | да | нет |
+| Cache counters (PMC/perf) | нет (UNAVAILABLE) | да (perf; могут быть права) | нет |
 | Current-thread registers | x86_64 | нет | нет |
 | Other-thread registers (consent) | x86_64 | да (ptrace x86_64/aarch64) | нет |
 | Simulation (L1/L2/RAM) | да (SIMULATED) | да | да |

@@ -91,6 +91,18 @@ fn native_capability_matrix_matches_host_limits() {
         adapter.check_availability(PlatformFeature::ForeignProcessMemory),
         Availability::NotImplemented
     );
+
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::Supported
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::CacheCounters),
+        Availability::Unavailable
+    );
+    #[cfg(not(any(windows, target_os = "linux")))]
     assert_eq!(
         adapter.check_availability(PlatformFeature::CacheCounters),
         Availability::NotImplemented

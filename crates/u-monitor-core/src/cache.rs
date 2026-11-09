@@ -1,5 +1,7 @@
-//! CPU cache topology contracts. Describes hierarchy metadata, never cache-line bytes.
+//! CPU cache topology and optional hardware counter contracts.
+//! Topology describes hierarchy metadata; counters never invent hits/misses.
 
+use crate::PlatformResult;
 use std::fmt;
 
 /// Which contents a cache level may hold, as reported by the OS/firmware.
@@ -45,4 +47,16 @@ pub struct CacheNode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheTopology {
     pub nodes: Vec<CacheNode>,
+}
+
+/// Hardware cache reference/miss counts over a short sample window.
+/// Values are process-scoped when the OS exposes that; never filled from simulation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheCounters {
+    /// Usually last-level cache references for the sample window.
+    pub references: PlatformResult<u64>,
+    /// Usually last-level cache misses for the same window as `references`.
+    pub misses: PlatformResult<u64>,
+    /// Wall-clock sample window in nanoseconds when both counters were armed together.
+    pub window_nanos: PlatformResult<u64>,
 }
