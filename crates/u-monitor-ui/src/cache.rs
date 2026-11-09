@@ -7,10 +7,17 @@ pub(crate) fn show(
     topology: &PlatformResult<CacheTopology>,
     counters: &mut PlatformResult<CacheCounters>,
     refresh_counters: &dyn Fn() -> PlatformResult<CacheCounters>,
+    highlight_cpu: Option<usize>,
+    highlight_node: Option<usize>,
 ) {
     ui.label(
         "Показаны только характеристики иерархии кэша (уровень, размер, линия, ассоциативность, разделение). Содержимое кэш-линий недоступно и не симулируется здесь.",
     );
+    if let Some(cpu) = highlight_cpu {
+        ui.label(format!(
+            "Подсветка узлов, связанных с logical CPU {cpu} (cross-panel selection)."
+        ));
+    }
     ui.add_space(8.0);
     ui.monospace(topology.availability().to_string());
     match topology {
@@ -36,8 +43,20 @@ pub(crate) fn show(
                             ui.label("Ассоц.");
                             ui.label("Логические CPU");
                             ui.end_row();
-                            for node in &measurement.value.nodes {
-                                ui.monospace(format!("L{}", node.level));
+                            for (index, node) in measurement.value.nodes.iter().enumerate() {
+                                let related = highlight_cpu.is_some_and(|cpu| {
+                                    node.shared_logical_processors.contains(&cpu)
+                                }) || highlight_node == Some(index);
+                                let level = if related {
+                                    format!("L{}*", node.level)
+                                } else {
+                                    format!("L{}", node.level)
+                                };
+                                if related {
+                                    ui.colored_label(ui.visuals().strong_text_color(), level);
+                                } else {
+                                    ui.monospace(level);
+                                }
                                 ui.monospace(node.kind.to_string());
                                 ui.label(match node.size_bytes {
                                     Some(bytes) => format_bytes(bytes),
@@ -178,9 +197,14 @@ mod tests {
         let mut counters = PlatformResult::Unavailable("not sampled".into());
         let output = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                show(ui, &topology, &mut counters, &|| {
-                    PlatformResult::NotImplemented("unused".into())
-                })
+                show(
+                    ui,
+                    &topology,
+                    &mut counters,
+                    &|| PlatformResult::NotImplemented("unused".into()),
+                    None,
+                    None,
+                )
             });
         });
         assert!(!output.shapes.is_empty());

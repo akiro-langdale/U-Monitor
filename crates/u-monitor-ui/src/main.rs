@@ -1,6 +1,7 @@
 mod app;
 mod cache;
 mod cpu;
+mod explorer;
 mod live;
 mod memory;
 mod panels;

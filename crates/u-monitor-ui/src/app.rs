@@ -1,6 +1,7 @@
 use crate::{
-    cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, processes::ProcessesPanel,
-    registers::RegistersPanel, simulation::SimulationPanel, storage::StoragePanel,
+    cache, cpu, explorer::ExplorerState, live::LiveTelemetry, memory::MemoryPanel, panels,
+    processes::ProcessesPanel, registers::RegistersPanel, simulation::SimulationPanel,
+    storage::StoragePanel,
 };
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
@@ -121,6 +122,7 @@ pub(crate) struct MonitorApp {
     list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
     refresh_cache_counters: Box<dyn Fn() -> PlatformResult<CacheCounters>>,
     read_file: Box<dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>>,
+    explorer: ExplorerState,
 }
 
 impl MonitorApp {
@@ -174,6 +176,7 @@ impl MonitorApp {
             list_threads,
             refresh_cache_counters,
             read_file,
+            explorer: ExplorerState::default(),
         }
     }
 
@@ -228,13 +231,62 @@ impl MonitorApp {
                 ui.label(egui::RichText::new(self.page.description()).weak());
                 ui.add_space(20.0);
                 match self.page {
-                    Page::Overview => panels::overview(ui, &self.identity, &self.capabilities),
+                    Page::Overview => {
+                        panels::overview(ui, &self.identity, &self.capabilities);
+                        ui.add_space(16.0);
+                        ui.heading("Экспорт provenance");
+                        ui.label(
+                            "JSON со статусами панелей и текущим cross-panel selection (без содержимого памяти).",
+                        );
+                        if ui.button("Экспорт JSON snapshot").clicked() {
+                            let json = crate::explorer::build_snapshot_json(
+                                &self.identity,
+                                &self.capabilities,
+                                &self.cpu,
+                                &self.storage,
+                                &self.cache,
+                                &self.registers.snapshot,
+                                &self.explorer.selection,
+                            );
+                            match crate::explorer::export_snapshot_to_temp(&json) {
+                                Ok(path) => {
+                                    self.explorer.last_export_path = Some(path);
+                                    self.explorer.last_export_error = None;
+                                }
+                                Err(error) => {
+                                    self.explorer.last_export_error = Some(error);
+                                    self.explorer.last_export_path = None;
+                                }
+                            }
+                        }
+                        if let Some(path) = &self.explorer.last_export_path {
+                            ui.monospace(format!("Saved: {}", path.display()));
+                        }
+                        if let Some(error) = &self.explorer.last_export_error {
+                            ui.colored_label(ui.visuals().error_fg_color, error);
+                        }
+                        ui.label(format!(
+                            "Selection: cpu={:?} cache_node={:?} sim_addr={:?}",
+                            self.explorer.selection.logical_cpu,
+                            self.explorer.selection.cache_node,
+                            self.explorer
+                                .selection
+                                .sim_address
+                                .map(|addr| format!("{addr:#x}"))
+                        ));
+                    }
                     Page::Processes => {
                         let refresh = self.refresh_processes.as_ref();
                         let threads = self.list_threads.as_ref();
                         self.processes.show(ui, refresh, threads);
                     }
-                    Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
+                    Page::Cpu => {
+                        let selected = self.explorer.selection.logical_cpu;
+                        if let Some(index) = cpu::show(ui, &self.cpu, &mut self.live, selected) {
+                            self.explorer.select_logical_cpu(index, &self.cache);
+                            self.page = Page::Cache;
+                        }
+                    }
                     Page::Storage => {
                         let read_file = self.read_file.as_ref();
                         self.storage_panel
@@ -269,7 +321,25 @@ impl MonitorApp {
                     }
                     Page::Cache => {
                         let refresh = self.refresh_cache_counters.as_ref();
-                        cache::show(ui, &self.cache, &mut self.cache_counters, refresh);
+                        cache::show(
+                            ui,
+                            &self.cache,
+                            &mut self.cache_counters,
+                            refresh,
+                            self.explorer.selection.logical_cpu,
+                            self.explorer.selection.cache_node,
+                        );
+                        if ui
+                            .add_enabled(
+                                self.explorer.selection.sim_address.is_some(),
+                                egui::Button::new("Открыть Simulation с адресом линии"),
+                            )
+                            .clicked()
+                            && let Some(address) = self.explorer.selection.sim_address
+                        {
+                            self.simulation.set_address(address);
+                            self.page = Page::Simulation;
+                        }
                     }
                     Page::Simulation => self.simulation.show(ui),
                 }
@@ -334,6 +404,7 @@ mod tests {
                 PlatformResult::NotImplemented("test fixture".into())
             }),
             read_file: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
+            explorer: ExplorerState::default(),
         }
     }
 

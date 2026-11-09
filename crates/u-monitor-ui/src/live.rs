@@ -187,14 +187,18 @@ impl LiveTelemetry {
         }
     }
 
-    pub(crate) fn show_cpu_live(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn show_cpu_live(
+        &mut self,
+        ui: &mut egui::Ui,
+        selected_logical: Option<usize>,
+    ) -> Option<usize> {
         self.controls(ui);
         self.cpu_history.show(ui);
         let Some(snapshot) = &self.latest else {
             if self.worker.is_some() && !self.disconnected {
                 ui.label("Ожидание первого снимка CPU…");
             }
-            return;
+            return None;
         };
         ui.label(format!(
             "Снимок #{} · UTC {}",
@@ -217,19 +221,22 @@ impl LiveTelemetry {
                 ));
                 total_usage(ui, &metrics.total_usage);
                 frequency_summary(ui, &metrics.logical_processors);
-                logical_table(ui, &metrics.logical_processors);
+                let clicked = logical_table(ui, &metrics.logical_processors, selected_logical);
                 ui.add_space(8.0);
                 ui.label(
                     "Нагрузка — отношение занятого времени логического процессора за окно счётчиков ОС. Частоты — текущие и максимальные значения, которые сообщает ОС. Первый снимок и слишком частые запросы дают UNAVAILABLE (прогрев / минимум интервала), а не ноль.",
                 );
+                clicked
             }
             PlatformResult::PermissionRequired(r)
             | PlatformResult::Unavailable(r)
             | PlatformResult::NotImplemented(r) => {
                 ui.label(r);
+                None
             }
             PlatformResult::Error(e) => {
                 ui.colored_label(ui.visuals().error_fg_color, e.to_string());
+                None
             }
         }
     }
@@ -357,13 +364,18 @@ fn mhz_cell(ui: &mut egui::Ui, result: &PlatformResult<u64>) {
     }
 }
 
-fn logical_table(ui: &mut egui::Ui, processors: &[LogicalCpuUsage]) {
+fn logical_table(
+    ui: &mut egui::Ui,
+    processors: &[LogicalCpuUsage],
+    selected_logical: Option<usize>,
+) -> Option<usize> {
     ui.add_space(8.0);
     ui.strong("Логические процессоры");
     if processors.is_empty() {
         ui.label("Список логических процессоров в этом снимке пуст.");
-        return;
+        return None;
     }
+    let mut clicked = None;
     egui::ScrollArea::horizontal().show(ui, |ui| {
         egui::Grid::new("cpu_logical_usage")
             .striped(true)
@@ -377,7 +389,11 @@ fn logical_table(ui: &mut egui::Ui, processors: &[LogicalCpuUsage]) {
                 ui.label("Статус нагрузки");
                 ui.end_row();
                 for cpu in processors {
-                    ui.monospace(cpu.index.to_string());
+                    let selected = selected_logical == Some(cpu.index);
+                    let response = ui.selectable_label(selected, cpu.index.to_string());
+                    if response.clicked() {
+                        clicked = Some(cpu.index);
+                    }
                     ui.label(&cpu.name);
                     match &cpu.usage {
                         PlatformResult::Success(m) => {
@@ -394,6 +410,7 @@ fn logical_table(ui: &mut egui::Ui, processors: &[LogicalCpuUsage]) {
                 }
             });
     });
+    clicked
 }
 
 #[cfg(test)]
@@ -447,7 +464,7 @@ mod tests {
             let output = ctx.run(egui::RawInput::default(), |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     live.show_ram(ui);
-                    live.show_cpu_live(ui);
+                    live.show_cpu_live(ui, None);
                 });
             });
             assert!(!output.shapes.is_empty());
@@ -500,7 +517,9 @@ mod tests {
         let mut text = String::new();
         for _ in 0..2 {
             let output = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| live.show_cpu_live(ui));
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    live.show_cpu_live(ui, None);
+                });
             });
             text.clear();
             fn collect(shape: &egui::Shape, text: &mut String) {

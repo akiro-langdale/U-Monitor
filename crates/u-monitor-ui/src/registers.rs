@@ -3,7 +3,7 @@ use eframe::egui;
 use u_monitor_core::{DataSource, PlatformResult, RegisterSnapshot, RegisterValue};
 
 pub(crate) struct RegistersPanel {
-    snapshot: PlatformResult<RegisterSnapshot>,
+    pub(crate) snapshot: PlatformResult<RegisterSnapshot>,
     previous: Option<RegisterSnapshot>,
     pub(crate) debug_consent: bool,
 }

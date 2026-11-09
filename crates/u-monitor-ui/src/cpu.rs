@@ -5,7 +5,12 @@ use u_monitor_core::{CpuInfo, DataSource, PlatformResult};
 
 pub(crate) mod history;
 
-pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<CpuInfo>, live: &mut LiveTelemetry) {
+pub(crate) fn show(
+    ui: &mut egui::Ui,
+    result: &PlatformResult<CpuInfo>,
+    live: &mut LiveTelemetry,
+    selected_logical: Option<usize>,
+) -> Option<usize> {
     ui.label("Сведения CPU получены при запуске приложения.");
     let field_width = (ui.available_width() - 190.0).clamp(140.0, 420.0);
     field(ui, result, field_width, |_, _| {});
@@ -54,8 +59,9 @@ pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<CpuInfo>, live: &m
     ui.add_space(16.0);
     ui.heading("Живая нагрузка");
     ui.label(egui::RichText::new("Источник: фоновый TelemetryWorker · MEASURED").weak());
+    ui.label("Клик по строке логического CPU выбирает его для Cache/Simulation.");
     ui.add_space(8.0);
-    live.show_cpu_live(ui);
+    live.show_cpu_live(ui, selected_logical)
 }
 
 fn field<T>(
@@ -114,7 +120,9 @@ mod tests {
         let mut text = String::new();
         for _ in 0..2 {
             let output = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| show(ui, result, &mut live));
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    show(ui, result, &mut live, None);
+                });
             });
             fn collect(shape: &egui::Shape, text: &mut String) {
                 match shape {

@@ -54,6 +54,11 @@ impl SimulationPanel {
         }
     }
 
+    pub(crate) fn set_address(&mut self, address: u64) {
+        self.custom_address = format!("{address:#x}");
+        self.run_access(address);
+    }
+
     pub(crate) fn show(&mut self, ui: &mut egui::Ui) {
         ui.label(
             "Эта панель запускает учебную модель L1→L2→RAM (set-associative LRU) и отдельную SIMULATED модель latency диска. Значения не смешиваются с MEASURED данными ОС.",
