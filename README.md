@@ -8,6 +8,21 @@
 Требования: Rust `1.90.0` (см. `rust-toolchain.toml`), Git, доступ к
 [репозиторию](https://github.com/akiro-langdale/U-Monitor.git).
 
+CI (`.github/workflows/ci.yml`) гоняет `fmt` / `clippy` / `test` на
+Ubuntu, Windows и macOS. Ограничения backend по OS/arch видны на странице
+«Обзор» и в `NativePlatformAdapter::check_availability`:
+
+| Возможность | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| SystemIdentity / CPU discovery / RAM / Storage | да | да | да\* |
+| Virtual memory map + HEX | да | да | нет |
+| Cache topology | да | да | нет |
+| Current-thread registers | x86_64 | нет | нет |
+| Simulation (L1/L2/RAM) | да (SIMULATED) | да | да |
+
+\* через `sysinfo`, где host поддерживается. Живая нагрузка CPU идёт через
+`NativeTelemetryAdapter`, а не через `PlatformFeature::CpuMetrics`.
+
 ```powershell
 rustup show
 cargo --version

@@ -1,8 +1,12 @@
 use crate::app::Page;
 use eframe::egui;
-use u_monitor_core::{DataSource, PlatformResult, SystemIdentity};
+use u_monitor_core::{Availability, DataSource, PlatformFeature, PlatformResult, SystemIdentity};
 
-pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdentity>) {
+pub(crate) fn overview(
+    ui: &mut egui::Ui,
+    identity: &PlatformResult<SystemIdentity>,
+    capabilities: &[(PlatformFeature, Availability)],
+) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         ui.heading("Среда выполнения");
@@ -40,6 +44,25 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
             PlatformResult::Error(error) => { ui.label(error.to_string()); }
         }
     });
+    ui.add_space(24.0);
+    ui.heading("Возможности платформы");
+    ui.label(
+        "Статусы относятся к NativePlatformAdapter на текущем OS/arch. NOT_IMPLEMENTED — нет backend, а не ошибка измерения.",
+    );
+    ui.add_space(8.0);
+    egui::Grid::new("platform_capabilities")
+        .striped(true)
+        .spacing([24.0, 4.0])
+        .show(ui, |ui| {
+            ui.label("Функция");
+            ui.label("Статус");
+            ui.end_row();
+            for (feature, availability) in capabilities {
+                ui.monospace(feature.to_string());
+                ui.monospace(availability.to_string());
+                ui.end_row();
+            }
+        });
     ui.add_space(24.0);
     ui.heading("Разделы приложения");
     ui.label("Статусы ниже относятся к подключению панелей GUI.");

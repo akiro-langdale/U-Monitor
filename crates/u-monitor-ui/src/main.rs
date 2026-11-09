@@ -13,13 +13,17 @@ use app::MonitorApp;
 use eframe::egui;
 use live::LiveTelemetry;
 use std::time::Duration;
-use u_monitor_core::PlatformAdapter;
+use u_monitor_core::{PlatformAdapter, PlatformFeature};
 use u_monitor_platform::{NativePlatformAdapter, NativeTelemetryAdapter};
 use u_monitor_telemetry::{TelemetryWorker, WorkerConfig};
 
 fn main() -> eframe::Result {
     // Composition root: acquire immutable identity once, before rendering frames.
     let identity = NativePlatformAdapter.system_identity();
+    let capabilities = PlatformFeature::ALL
+        .into_iter()
+        .map(|feature| (feature, NativePlatformAdapter.check_availability(feature)))
+        .collect::<Vec<_>>();
     let cpu = NativePlatformAdapter.cpu_info();
     let storage = NativePlatformAdapter.storage_volumes();
     let regions = NativePlatformAdapter.virtual_memory_regions();
@@ -48,6 +52,7 @@ fn main() -> eframe::Result {
             Ok(Box::new(MonitorApp::new(
                 cc,
                 identity,
+                capabilities,
                 cpu,
                 storage,
                 live,

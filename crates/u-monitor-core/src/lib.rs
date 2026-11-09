@@ -137,6 +137,41 @@ pub enum PlatformFeature {
     CacheTopology,
 }
 
+impl PlatformFeature {
+    /// Stable order for capability matrices and overview UI.
+    pub const ALL: [Self; 11] = [
+        Self::SystemIdentity,
+        Self::CpuDiscovery,
+        Self::CpuMetrics,
+        Self::RamMetrics,
+        Self::VirtualMemoryMap,
+        Self::MemoryBytes,
+        Self::StorageDiscovery,
+        Self::DiskStorage,
+        Self::HardwareRegisters,
+        Self::CurrentThreadRegisters,
+        Self::CacheTopology,
+    ];
+}
+
+impl fmt::Display for PlatformFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::SystemIdentity => "SystemIdentity",
+            Self::CpuDiscovery => "CpuDiscovery",
+            Self::CpuMetrics => "CpuMetrics",
+            Self::RamMetrics => "RamMetrics",
+            Self::VirtualMemoryMap => "VirtualMemoryMap",
+            Self::MemoryBytes => "MemoryBytes",
+            Self::StorageDiscovery => "StorageDiscovery",
+            Self::DiskStorage => "DiskStorage",
+            Self::HardwareRegisters => "HardwareRegisters",
+            Self::CurrentThreadRegisters => "CurrentThreadRegisters",
+            Self::CacheTopology => "CacheTopology",
+        })
+    }
+}
+
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
     /// Samples CPU utilization while retaining backend counters between calls.

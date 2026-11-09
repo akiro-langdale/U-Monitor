@@ -16,8 +16,8 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    CacheTopology, CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, RegisterSnapshot,
-    StorageVolume, SystemIdentity, VirtualMemoryRegion,
+    Availability, CacheTopology, CpuInfo, MemoryBytes, MemoryReadRequest, PlatformFeature,
+    PlatformResult, RegisterSnapshot, StorageVolume, SystemIdentity, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +95,7 @@ pub(crate) struct MonitorApp {
     page: Page,
     dark: bool,
     identity: PlatformResult<SystemIdentity>,
+    capabilities: Vec<(PlatformFeature, Availability)>,
     cpu: PlatformResult<CpuInfo>,
     storage: PlatformResult<Vec<StorageVolume>>,
     live: LiveTelemetry,
@@ -111,6 +112,7 @@ impl MonitorApp {
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
         identity: PlatformResult<SystemIdentity>,
+        capabilities: Vec<(PlatformFeature, Availability)>,
         cpu: PlatformResult<CpuInfo>,
         storage: PlatformResult<Vec<StorageVolume>>,
         live: LiveTelemetry,
@@ -130,6 +132,7 @@ impl MonitorApp {
             page: Page::Overview,
             dark,
             identity,
+            capabilities,
             cpu,
             storage,
             live,
@@ -193,7 +196,7 @@ impl MonitorApp {
                 ui.label(egui::RichText::new(self.page.description()).weak());
                 ui.add_space(20.0);
                 match self.page {
-                    Page::Overview => panels::overview(ui, &self.identity),
+                    Page::Overview => panels::overview(ui, &self.identity, &self.capabilities),
                     Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
                     Page::Storage => storage::show(ui, &self.storage),
                     Page::Ram => self.live.show_ram(ui),
@@ -239,6 +242,10 @@ mod tests {
             page,
             dark,
             identity,
+            capabilities: PlatformFeature::ALL
+                .into_iter()
+                .map(|feature| (feature, Availability::NotImplemented))
+                .collect(),
             cpu: PlatformResult::NotImplemented("test fixture".into()),
             storage: PlatformResult::NotImplemented("test fixture".into()),
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
