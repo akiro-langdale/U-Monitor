@@ -10,27 +10,37 @@ mod virtual_memory;
 
 /// Backend minimum between CPU counter refreshes for the native sampler.
 pub const MINIMUM_CPU_SAMPLING_INTERVAL: std::time::Duration = cpu_metrics::MINIMUM_INTERVAL;
+/// Upper bound for one user-selected file HEX sample.
+pub use storage::MAX_FILE_SAMPLE_BYTES;
+/// Backend minimum between disk counter refreshes for the native sampler.
+pub use storage::MINIMUM_DISK_IO_INTERVAL;
 /// Upper bound for one current-process memory sample returned to the inspector.
 pub use virtual_memory::MAX_MEMORY_SAMPLE_BYTES;
 
 use std::time::SystemTime;
 use u_monitor_core::{
     Architecture, Availability, CacheCounters, CacheTopology, CpuInfo, CpuMetrics, DataSource,
-    Measurement, MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
-    PlatformResult, ProcessId, ProcessInfo, RamInfo, RegisterSnapshot, StorageVolume,
-    SystemIdentity, ThreadId, ThreadInfo, VirtualMemoryRegion,
+    DiskIoRates, FileBytes, FileReadRequest, Measurement, MemoryBytes, MemoryReadRequest,
+    OperatingSystem, PlatformAdapter, PlatformFeature, PlatformResult, ProcessId, ProcessInfo,
+    RamInfo, RegisterSnapshot, StorageVolume, SystemIdentity, ThreadId, ThreadInfo,
+    VirtualMemoryRegion,
 };
 
-/// Stateful CPU and RAM sampling adapter owned exclusively by a collector.
+/// Stateful CPU, RAM and disk I/O sampling adapter owned exclusively by a collector.
 /// System counters are initialized lazily on the sampling thread.
 #[derive(Default)]
 pub struct NativeTelemetryAdapter {
     cpu: cpu_metrics::CpuSampler,
+    disk: storage::DiskIoSampler,
 }
 
 impl PlatformAdapter for NativeTelemetryAdapter {
     fn cpu_metrics(&mut self) -> PlatformResult<CpuMetrics> {
         self.cpu.sample()
+    }
+
+    fn disk_io_rates(&mut self) -> PlatformResult<DiskIoRates> {
+        self.disk.sample()
     }
 
     fn ram_info(&self) -> PlatformResult<RamInfo> {
@@ -50,6 +60,10 @@ impl PlatformAdapter for NativeTelemetryAdapter {
                     Availability::Unavailable
                 }
             }
+            #[cfg(any(windows, target_os = "linux"))]
+            PlatformFeature::DiskStorage => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux")))]
+            PlatformFeature::DiskStorage => Availability::NotImplemented,
             _ => Availability::NotImplemented,
         }
     }
@@ -62,6 +76,10 @@ pub struct NativePlatformAdapter;
 impl PlatformAdapter for NativePlatformAdapter {
     fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
         storage::discover()
+    }
+
+    fn read_file_bytes(&self, request: FileReadRequest) -> PlatformResult<FileBytes> {
+        storage::read_file_bytes(request)
     }
 
     fn ram_info(&self) -> PlatformResult<RamInfo> {
@@ -174,9 +192,13 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::CacheCounters => Availability::Unavailable,
             #[cfg(not(any(windows, target_os = "linux")))]
             PlatformFeature::CacheCounters => Availability::NotImplemented,
-            PlatformFeature::CpuMetrics
-            | PlatformFeature::DiskStorage
-            | PlatformFeature::HardwareRegisters => Availability::NotImplemented,
+            #[cfg(any(windows, target_os = "linux"))]
+            PlatformFeature::DiskStorage => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux")))]
+            PlatformFeature::DiskStorage => Availability::NotImplemented,
+            PlatformFeature::CpuMetrics | PlatformFeature::HardwareRegisters => {
+                Availability::NotImplemented
+            }
         }
     }
 }

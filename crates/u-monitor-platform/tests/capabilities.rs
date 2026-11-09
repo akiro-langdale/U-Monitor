@@ -11,7 +11,6 @@ fn native_capability_matrix_matches_host_limits() {
 
     for feature in [
         PlatformFeature::CpuMetrics,
-        PlatformFeature::DiskStorage,
         PlatformFeature::HardwareRegisters,
     ] {
         assert_eq!(
@@ -20,6 +19,17 @@ fn native_capability_matrix_matches_host_limits() {
             "{feature}"
         );
     }
+
+    #[cfg(any(windows, target_os = "linux"))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::DiskStorage),
+        Availability::Supported
+    );
+    #[cfg(not(any(windows, target_os = "linux")))]
+    assert_eq!(
+        adapter.check_availability(PlatformFeature::DiskStorage),
+        Availability::NotImplemented
+    );
 
     #[cfg(any(windows, target_os = "linux"))]
     {

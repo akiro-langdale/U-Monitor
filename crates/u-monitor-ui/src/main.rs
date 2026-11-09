@@ -86,6 +86,7 @@ fn main() -> eframe::Result {
                 Box::new(|| NativePlatformAdapter.list_processes()),
                 Box::new(|pid| NativePlatformAdapter.list_threads(pid)),
                 Box::new(|| NativePlatformAdapter.cache_counters()),
+                Box::new(|request| NativePlatformAdapter.read_file_bytes(request)),
             )))
         }),
     )

@@ -1,4 +1,12 @@
-//! Read-only mounted-volume discovery. Does not request I/O counters or raw blocks.
+//! Mounted-volume discovery, disk I/O rates, and read-only file samples.
+mod file_hex;
+mod io_rates;
+
+pub use file_hex::MAX_FILE_SAMPLE_BYTES;
+pub(crate) use file_hex::read_file_bytes;
+pub(crate) use io_rates::DiskIoSampler;
+pub use io_rates::MINIMUM_INTERVAL as MINIMUM_DISK_IO_INTERVAL;
+
 use std::{ffi::OsStr, time::SystemTime};
 use sysinfo::{DiskKind, DiskRefreshKind, Disks};
 use u_monitor_core::{

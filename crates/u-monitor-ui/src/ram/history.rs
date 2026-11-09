@@ -196,6 +196,7 @@ mod tests {
                 source: DataSource::Measured,
                 timestamp: UNIX_EPOCH.into(),
             }),
+            disk: PlatformResult::NotImplemented("test fixture".into()),
         }
     }
 

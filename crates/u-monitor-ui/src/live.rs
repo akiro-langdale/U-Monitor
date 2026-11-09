@@ -1,5 +1,5 @@
-//! Shared background telemetry for RAM and CPU panels.
-use crate::{cpu::history::CpuHistory, ram::history::RamHistory};
+//! Shared background telemetry for RAM, CPU and disk panels.
+use crate::{cpu::history::CpuHistory, ram::history::RamHistory, storage::history::DiskIoHistory};
 use eframe::egui;
 use std::{sync::mpsc::TryRecvError, time::Duration};
 use u_monitor_core::{
@@ -12,6 +12,7 @@ pub(crate) struct LiveTelemetry {
     latest: Option<TelemetrySnapshot>,
     ram_history: RamHistory,
     cpu_history: CpuHistory,
+    disk_history: DiskIoHistory,
     error: Option<DiagnosticError>,
     disconnected: bool,
     interval_ms: u64,
@@ -30,6 +31,7 @@ impl LiveTelemetry {
             latest: None,
             ram_history: RamHistory::default(),
             cpu_history: CpuHistory::default(),
+            disk_history: DiskIoHistory::default(),
             disconnected: false,
             interval_ms: 1000,
             dropped: 0,
@@ -43,6 +45,7 @@ impl LiveTelemetry {
                     Ok(snapshot) => {
                         self.ram_history.push(&snapshot);
                         self.cpu_history.push(&snapshot);
+                        self.disk_history.push(&snapshot);
                         self.latest = Some(snapshot);
                     }
                     Err(TryRecvError::Empty) => break,
@@ -133,6 +136,57 @@ impl LiveTelemetry {
         }
     }
 
+    pub(crate) fn show_disk_live(&mut self, ui: &mut egui::Ui) {
+        self.controls(ui);
+        self.disk_history.show(ui);
+        let Some(snapshot) = &self.latest else {
+            if self.worker.is_some() && !self.disconnected {
+                ui.label("Ожидание первого снимка Disk I/O…");
+            }
+            return;
+        };
+        ui.label(format!(
+            "Снимок #{} · UTC {}",
+            snapshot.sequence,
+            snapshot.captured_at.to_rfc3339()
+        ));
+        ui.monospace(snapshot.disk.availability().to_string());
+        match &snapshot.disk {
+            PlatformResult::Success(measurement) => {
+                ui.monospace(match measurement.source {
+                    DataSource::Measured => "MEASURED",
+                    DataSource::Calculated => "CALCULATED",
+                    DataSource::Simulated => "SIMULATED",
+                });
+                ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
+                rate_row(ui, "Чтение", &measurement.value.read_bytes_per_sec);
+                rate_row(ui, "Запись", &measurement.value.write_bytes_per_sec);
+                match &measurement.value.sample_interval {
+                    PlatformResult::Success(interval) => {
+                        ui.label(format!(
+                            "Окно счётчиков: {:.0} мс",
+                            interval.value.as_secs_f64() * 1000.0
+                        ));
+                    }
+                    other => {
+                        ui.label(format!("Окно счётчиков: {}", other.availability()));
+                    }
+                }
+                ui.label(
+                    "Скорости CALCULATED из MEASURED накопительных счётчиков устройства. Первый снимок и слишком частые запросы — UNAVAILABLE, не ноль.",
+                );
+            }
+            PlatformResult::PermissionRequired(r)
+            | PlatformResult::Unavailable(r)
+            | PlatformResult::NotImplemented(r) => {
+                ui.label(r);
+            }
+            PlatformResult::Error(e) => {
+                ui.colored_label(ui.visuals().error_fg_color, e.to_string());
+            }
+        }
+    }
+
     pub(crate) fn show_cpu_live(&mut self, ui: &mut egui::Ui) {
         self.controls(ui);
         self.cpu_history.show(ui);
@@ -178,6 +232,35 @@ impl LiveTelemetry {
                 ui.colored_label(ui.visuals().error_fg_color, e.to_string());
             }
         }
+    }
+}
+
+fn rate_row(ui: &mut egui::Ui, label: &str, result: &PlatformResult<f64>) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        match result {
+            PlatformResult::Success(measurement) => {
+                ui.monospace(format_bps(measurement.value));
+                ui.monospace(match measurement.source {
+                    DataSource::Measured => "MEASURED",
+                    DataSource::Calculated => "CALCULATED",
+                    DataSource::Simulated => "SIMULATED",
+                });
+            }
+            other => {
+                ui.monospace(other.availability().to_string());
+            }
+        }
+    });
+}
+
+fn format_bps(value: f64) -> String {
+    if value >= 1_048_576.0 {
+        format!("{:.2} MiB/s", value / 1_048_576.0)
+    } else if value >= 1024.0 {
+        format!("{:.2} KiB/s", value / 1024.0)
+    } else {
+        format!("{value:.0} B/s")
     }
 }
 
@@ -359,6 +442,7 @@ mod tests {
                 elapsed: Duration::ZERO,
                 ram,
                 cpu,
+                disk: PlatformResult::NotImplemented("test fixture".into()),
             });
             let output = ctx.run(egui::RawInput::default(), |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
@@ -411,6 +495,7 @@ mod tests {
                 source: DataSource::Measured,
                 timestamp: UNIX_EPOCH.into(),
             }),
+            disk: PlatformResult::NotImplemented("test fixture".into()),
         });
         let mut text = String::new();
         for _ in 0..2 {

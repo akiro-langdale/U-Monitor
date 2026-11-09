@@ -1,6 +1,7 @@
-//! Mounted-volume information, not a physical-device inventory.
+//! Mounted-volume information and optional live disk I/O rates.
+//! Rates are CALCULATED from MEASURED cumulative counters; never simulated.
 use crate::PlatformResult;
-use std::{ffi::OsString, fmt, path::PathBuf};
+use std::{ffi::OsString, fmt, path::PathBuf, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageKind {
@@ -38,4 +39,31 @@ pub struct StorageVolume {
     pub file_system: PlatformResult<OsString>,
     pub kind: StorageKind,
     pub space: VolumeSpace,
+}
+
+/// Aggregate host disk throughput derived from cumulative device counters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiskIoRates {
+    /// Bytes read per second over the completed sample window.
+    pub read_bytes_per_sec: PlatformResult<f64>,
+    /// Bytes written per second over the same window.
+    pub write_bytes_per_sec: PlatformResult<f64>,
+    /// Observed interval between the two counter snapshots used for the rate.
+    pub sample_interval: PlatformResult<Duration>,
+}
+
+/// Read-only request for a regular file hex sample. Never opens raw devices for write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileReadRequest {
+    pub path: PathBuf,
+    pub offset: u64,
+    pub length: usize,
+}
+
+/// Cap-limited bytes read from a user-selected regular file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileBytes {
+    pub path: PathBuf,
+    pub offset: u64,
+    pub bytes: Vec<u8>,
 }

@@ -8,11 +8,11 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use u_monitor_core::{
-    CpuMetrics, DiagnosticError, PlatformAdapter, PlatformResult, RamInfo, Timestamp,
+    CpuMetrics, DiagnosticError, DiskIoRates, PlatformAdapter, PlatformResult, RamInfo, Timestamp,
 };
 pub use worker::{TelemetryWorker, WorkerConfig, WorkerReport};
 
-/// One sampling cycle. CPU and RAM are sequential, not an atomic OS snapshot.
+/// One sampling cycle. CPU, RAM and disk I/O are sequential, not an atomic OS snapshot.
 /// Failed attempts remain in history as failures.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetrySnapshot {
@@ -26,6 +26,7 @@ pub struct TelemetrySnapshot {
     pub elapsed: Duration,
     pub ram: PlatformResult<RamInfo>,
     pub cpu: PlatformResult<CpuMetrics>,
+    pub disk: PlatformResult<DiskIoRates>,
 }
 
 /// Owns an adapter and retains at most capacity snapshots, oldest first.
@@ -64,12 +65,14 @@ impl<A: PlatformAdapter> TelemetryCollector<A> {
         })?;
         let ram = self.adapter.ram_info();
         let cpu = self.adapter.cpu_metrics();
+        let disk = self.adapter.disk_io_rates();
         let snapshot = TelemetrySnapshot {
             sequence,
             captured_at: SystemTime::now().into(),
             elapsed: self.started_at.elapsed(),
             ram,
             cpu,
+            disk,
         };
         if self.history.len() == self.capacity.get() {
             self.history.pop_front();

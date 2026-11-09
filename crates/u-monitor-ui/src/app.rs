@@ -1,6 +1,6 @@
 use crate::{
     cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, processes::ProcessesPanel,
-    registers::RegistersPanel, simulation::SimulationPanel, storage,
+    registers::RegistersPanel, simulation::SimulationPanel, storage::StoragePanel,
 };
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
@@ -16,9 +16,9 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    Availability, CacheCounters, CacheTopology, CpuInfo, InspectionTarget, MemoryBytes,
-    MemoryReadRequest, PlatformFeature, PlatformResult, ProcessInfo, RegisterSnapshot,
-    StorageVolume, SystemIdentity, ThreadInfo, VirtualMemoryRegion,
+    Availability, CacheCounters, CacheTopology, CpuInfo, FileBytes, FileReadRequest,
+    InspectionTarget, MemoryBytes, MemoryReadRequest, PlatformFeature, PlatformResult, ProcessInfo,
+    RegisterSnapshot, StorageVolume, SystemIdentity, ThreadInfo, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +66,7 @@ impl Page {
             Self::Cpu => "Топология CPU и живая нагрузка",
             Self::Ram => "Статистика оперативной памяти",
             Self::Memory => "Виртуальные регионы и HEX выбранной цели",
-            Self::Storage => "Тома, файловые системы и пространство",
+            Self::Storage => "Тома, живой Disk I/O и HEX файла",
             Self::Registers => "Регистры выбранного потока",
             Self::Cache => "Характеристики и иерархия кэшей",
             Self::Simulation => "Отдельные модели иерархии памяти",
@@ -84,7 +84,7 @@ impl Page {
                 "Панель памяти подключена: карта виртуальных регионов текущего процесса."
             }
             Self::Storage => {
-                "Панель накопителей подключена: смонтированные тома на момент запуска."
+                "Панель накопителей подключена: тома, живой Disk I/O и read-only HEX файла."
             }
             Self::Registers => {
                 "Панель регистров подключена: снимок текущего потока (другие потоки — отдельно)."
@@ -106,6 +106,7 @@ pub(crate) struct MonitorApp {
     capabilities: Vec<(PlatformFeature, Availability)>,
     cpu: PlatformResult<CpuInfo>,
     storage: PlatformResult<Vec<StorageVolume>>,
+    storage_panel: StoragePanel,
     live: LiveTelemetry,
     processes: ProcessesPanel,
     memory: MemoryPanel,
@@ -119,6 +120,7 @@ pub(crate) struct MonitorApp {
     refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
     list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
     refresh_cache_counters: Box<dyn Fn() -> PlatformResult<CacheCounters>>,
+    read_file: Box<dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>>,
 }
 
 impl MonitorApp {
@@ -142,6 +144,7 @@ impl MonitorApp {
         refresh_processes: Box<dyn Fn() -> PlatformResult<Vec<ProcessInfo>>>,
         list_threads: Box<dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>>,
         refresh_cache_counters: Box<dyn Fn() -> PlatformResult<CacheCounters>>,
+        read_file: Box<dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
         cc.egui_ctx.set_theme(if dark {
@@ -156,6 +159,7 @@ impl MonitorApp {
             capabilities,
             cpu,
             storage,
+            storage_panel: StoragePanel::default(),
             live,
             processes: ProcessesPanel::new(processes, target),
             memory: MemoryPanel::new(regions),
@@ -169,6 +173,7 @@ impl MonitorApp {
             refresh_processes,
             list_threads,
             refresh_cache_counters,
+            read_file,
         }
     }
 
@@ -230,7 +235,11 @@ impl MonitorApp {
                         self.processes.show(ui, refresh, threads);
                     }
                     Page::Cpu => cpu::show(ui, &self.cpu, &mut self.live),
-                    Page::Storage => storage::show(ui, &self.storage),
+                    Page::Storage => {
+                        let read_file = self.read_file.as_ref();
+                        self.storage_panel
+                            .show(ui, &self.storage, &mut self.live, read_file);
+                    }
                     Page::Ram => self.live.show_ram(ui),
                     Page::Memory => {
                         if self.processes.target().is_current_process() {
@@ -301,6 +310,7 @@ mod tests {
                 .collect(),
             cpu: PlatformResult::NotImplemented("test fixture".into()),
             storage: PlatformResult::NotImplemented("test fixture".into()),
+            storage_panel: StoragePanel::default(),
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
             processes: ProcessesPanel::new(
                 PlatformResult::NotImplemented("test fixture".into()),
@@ -321,6 +331,7 @@ mod tests {
             refresh_cache_counters: Box::new(|| {
                 PlatformResult::NotImplemented("test fixture".into())
             }),
+            read_file: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
         }
     }
 

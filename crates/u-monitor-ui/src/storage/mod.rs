@@ -1,8 +1,140 @@
-//! Displays the startup volume snapshot without filesystem access during frames.
-use eframe::egui;
-use u_monitor_core::{DataSource, PlatformResult, StorageVolume};
+//! Volume snapshot, live disk I/O and read-only file HEX samples.
+pub(crate) mod history;
 
-pub(crate) fn show(ui: &mut egui::Ui, result: &PlatformResult<Vec<StorageVolume>>) {
+use crate::live::LiveTelemetry;
+use eframe::egui;
+use std::path::PathBuf;
+use u_monitor_core::{DataSource, FileBytes, FileReadRequest, PlatformResult, StorageVolume};
+use u_monitor_platform::MAX_FILE_SAMPLE_BYTES;
+
+pub(crate) struct StoragePanel {
+    path: String,
+    offset: u64,
+    length: usize,
+    sample: Option<PlatformResult<FileBytes>>,
+}
+
+impl Default for StoragePanel {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            offset: 0,
+            length: MAX_FILE_SAMPLE_BYTES,
+            sample: None,
+        }
+    }
+}
+
+impl StoragePanel {
+    pub(crate) fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        volumes: &PlatformResult<Vec<StorageVolume>>,
+        live: &mut LiveTelemetry,
+        read_file: &dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>,
+    ) {
+        show_volumes(ui, volumes);
+        ui.add_space(16.0);
+        ui.heading("Живой Disk I/O");
+        live.show_disk_live(ui);
+        ui.add_space(16.0);
+        self.show_file_hex(ui, read_file);
+    }
+
+    fn show_file_hex(
+        &mut self,
+        ui: &mut egui::Ui,
+        read_file: &dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>,
+    ) {
+        ui.heading("HEX файла (только чтение)");
+        ui.label(format!(
+            "Пользовательский путь к обычному файлу. Сырые устройства не открываются на запись. Максимум {MAX_FILE_SAMPLE_BYTES} байт."
+        ));
+        ui.horizontal(|ui| {
+            ui.label("Путь");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.path)
+                    .desired_width(420.0)
+                    .hint_text("C:\\\\path\\\\file.bin"),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label("Offset");
+            ui.add(egui::DragValue::new(&mut self.offset).speed(1));
+            ui.label("Length");
+            ui.add(
+                egui::DragValue::new(&mut self.length)
+                    .range(1..=MAX_FILE_SAMPLE_BYTES)
+                    .speed(1),
+            );
+            if ui.button("Прочитать").clicked() {
+                let path = PathBuf::from(self.path.trim());
+                self.sample = Some(read_file(FileReadRequest {
+                    path,
+                    offset: self.offset,
+                    length: self.length,
+                }));
+            }
+        });
+        if let Some(sample) = &self.sample {
+            ui.monospace(sample.availability().to_string());
+            match sample {
+                PlatformResult::Success(measurement) => {
+                    ui.monospace(source(measurement.source));
+                    ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
+                    ui.label(format!(
+                        "{} @ {:#x} · {} байт",
+                        measurement.value.path.display(),
+                        measurement.value.offset,
+                        measurement.value.bytes.len()
+                    ));
+                    ui.monospace(hex_dump(measurement.value.offset, &measurement.value.bytes));
+                }
+                PlatformResult::PermissionRequired(r)
+                | PlatformResult::Unavailable(r)
+                | PlatformResult::NotImplemented(r) => {
+                    ui.label(r.as_str());
+                }
+                PlatformResult::Error(e) => {
+                    ui.colored_label(ui.visuals().error_fg_color, e.to_string());
+                }
+            }
+        }
+    }
+}
+
+fn hex_dump(base: u64, bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for (row, chunk) in bytes.chunks(16).enumerate() {
+        let address = base.saturating_add((row * 16) as u64);
+        out.push_str(&format!("{address:016x}  "));
+        for (index, byte) in chunk.iter().enumerate() {
+            out.push_str(&format!("{byte:02x} "));
+            if index == 7 {
+                out.push(' ');
+            }
+        }
+        for index in chunk.len()..16 {
+            out.push_str("   ");
+            if index == 7 {
+                out.push(' ');
+            }
+        }
+        out.push(' ');
+        for byte in chunk {
+            let ch = if byte.is_ascii_graphic() || *byte == b' ' {
+                *byte as char
+            } else {
+                '.'
+            };
+            out.push(ch);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn show_volumes(ui: &mut egui::Ui, result: &PlatformResult<Vec<StorageVolume>>) {
     ui.label("Снимок смонтированных томов при запуске приложения.");
     ui.monospace(result.availability().to_string());
     let snapshot = match result {
@@ -137,7 +269,7 @@ mod tests {
                 ..Default::default()
             };
             let output = ctx.run(input, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| show(ui, result));
+                egui::CentralPanel::default().show(ctx, |ui| show_volumes(ui, result));
             });
             fn collect(shape: &egui::Shape, text: &mut String) {
                 match shape {

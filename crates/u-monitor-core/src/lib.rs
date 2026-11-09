@@ -18,7 +18,9 @@ pub use memory::{
 pub use process::{InspectionTarget, ProcessId, ProcessInfo, ThreadId, ThreadInfo};
 pub use ram::RamInfo;
 pub use registers::{RegisterArchitecture, RegisterSnapshot, RegisterValue};
-pub use storage::{StorageKind, StorageVolume, VolumeSpace};
+pub use storage::{
+    DiskIoRates, FileBytes, FileReadRequest, StorageKind, StorageVolume, VolumeSpace,
+};
 
 pub use system::{Architecture, OperatingSystem, SystemIdentity};
 
@@ -200,6 +202,18 @@ pub trait PlatformAdapter {
     /// Enumerates mounted volumes visible to the backend, not all physical disks.
     fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
         PlatformResult::NotImplemented("Mounted-volume discovery is not implemented".into())
+    }
+
+    /// Samples host disk read/write throughput from cumulative counters.
+    /// First/too-early attempts may be Unavailable. Must not sleep to warm up.
+    fn disk_io_rates(&mut self) -> PlatformResult<DiskIoRates> {
+        PlatformResult::NotImplemented("Disk I/O rate sampling is not implemented".into())
+    }
+
+    /// Reads a bounded sample from a user-selected regular file. Read-only; no raw device write.
+    fn read_file_bytes(&self, request: FileReadRequest) -> PlatformResult<FileBytes> {
+        let _ = request;
+        PlatformResult::NotImplemented("File hex sampling is not implemented".into())
     }
 
     /// Returns one RAM statistics snapshot without reading physical memory bytes.
