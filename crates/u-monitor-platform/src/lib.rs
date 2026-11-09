@@ -1,4 +1,5 @@
 //! Platform adapters for system identity, CPU, RAM, memory map and mounted volumes.
+mod cache;
 mod cpu;
 mod cpu_metrics;
 mod ram;
@@ -13,9 +14,9 @@ pub use virtual_memory::MAX_MEMORY_SAMPLE_BYTES;
 
 use std::time::SystemTime;
 use u_monitor_core::{
-    Architecture, Availability, CpuInfo, CpuMetrics, DataSource, Measurement, MemoryBytes,
-    MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature, PlatformResult, RamInfo,
-    RegisterSnapshot, StorageVolume, SystemIdentity, VirtualMemoryRegion,
+    Architecture, Availability, CacheTopology, CpuInfo, CpuMetrics, DataSource, Measurement,
+    MemoryBytes, MemoryReadRequest, OperatingSystem, PlatformAdapter, PlatformFeature,
+    PlatformResult, RamInfo, RegisterSnapshot, StorageVolume, SystemIdentity, VirtualMemoryRegion,
 };
 
 /// Stateful CPU and RAM sampling adapter owned exclusively by a collector.
@@ -84,6 +85,10 @@ impl PlatformAdapter for NativePlatformAdapter {
         registers::capture_current_thread()
     }
 
+    fn cache_topology(&self) -> PlatformResult<CacheTopology> {
+        cache::discover()
+    }
+
     fn name(&self) -> &'static str {
         "Native Platform Adapter"
     }
@@ -124,6 +129,10 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::CurrentThreadRegisters => Availability::Supported,
             #[cfg(not(all(windows, target_arch = "x86_64")))]
             PlatformFeature::CurrentThreadRegisters => Availability::NotImplemented,
+            #[cfg(any(windows, target_os = "linux"))]
+            PlatformFeature::CacheTopology => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux")))]
+            PlatformFeature::CacheTopology => Availability::NotImplemented,
             PlatformFeature::CpuMetrics
             | PlatformFeature::DiskStorage
             | PlatformFeature::HardwareRegisters => Availability::NotImplemented,

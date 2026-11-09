@@ -1,5 +1,6 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
+mod cache;
 mod cpu;
 mod memory;
 mod ram;
@@ -7,6 +8,7 @@ mod registers;
 mod storage;
 mod system;
 
+pub use cache::{CacheKind, CacheNode, CacheTopology};
 pub use cpu::{CpuInfo, CpuMetrics, CpuUsagePercent, LogicalCpuUsage};
 pub use memory::{
     MemoryBytes, MemoryProtection, MemoryReadRequest, MemoryRegionKind, MemoryState,
@@ -132,6 +134,7 @@ pub enum PlatformFeature {
     DiskStorage,
     HardwareRegisters,
     CurrentThreadRegisters,
+    CacheTopology,
 }
 
 /// The contract for platform-dependent adapters
@@ -172,6 +175,11 @@ pub trait PlatformAdapter {
     /// Other threads usually require debug permissions and are not covered here.
     fn current_thread_registers(&self) -> PlatformResult<RegisterSnapshot> {
         PlatformResult::NotImplemented("Current-thread register capture is not implemented".into())
+    }
+
+    /// Discovers cache hierarchy metadata (sizes, levels, sharing). Never cache contents.
+    fn cache_topology(&self) -> PlatformResult<CacheTopology> {
+        PlatformResult::NotImplemented("Cache topology discovery is not implemented".into())
     }
 
     /// Discovers OS-reported CPU models and topology without sampling CPU load.

@@ -1,4 +1,5 @@
 mod app;
+mod cache;
 mod cpu;
 mod live;
 mod memory;
@@ -22,6 +23,7 @@ fn main() -> eframe::Result {
     let storage = NativePlatformAdapter.storage_volumes();
     let regions = NativePlatformAdapter.virtual_memory_regions();
     let registers = NativePlatformAdapter.current_thread_registers();
+    let cache = NativePlatformAdapter.cache_topology();
     let live = LiveTelemetry::new(TelemetryWorker::start(
         NativeTelemetryAdapter::default(),
         WorkerConfig {
@@ -50,6 +52,7 @@ fn main() -> eframe::Result {
                 live,
                 regions,
                 registers,
+                cache,
                 Box::new(|request| NativePlatformAdapter.read_current_process_bytes(request)),
                 Box::new(|| NativePlatformAdapter.current_thread_registers()),
             )))

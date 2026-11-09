@@ -77,6 +77,12 @@ Linux): база, размер, состояние, доступ и тип.
 (Windows x86-64: `RtlCaptureContext`): HEX/DEC/BIN и Δ к предыдущему снимку
 (`CALCULATED`). Другие потоки и ISA пока не реализованы.
 
+Страница «Кэш» показывает MEASURED-топологию иерархии CPU-кэшей (уровень,
+тип, размер, размер линии, ассоциативность, shared logical CPUs). На Windows
+используется `GetLogicalProcessorInformationEx(RelationCache)`, на Linux —
+`/sys/devices/system/cpu/*/cache/index*`. Содержимое кэш-линий недоступно и
+не реконструируется.
+
 ```powershell
 cargo run -p u-monitor-ui
 ```

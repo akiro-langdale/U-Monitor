@@ -1,5 +1,6 @@
 use crate::{
-    cpu, live::LiveTelemetry, memory::MemoryPanel, panels, registers::RegistersPanel, storage,
+    cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, registers::RegistersPanel,
+    storage,
 };
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
@@ -15,8 +16,8 @@ fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
 }
 use eframe::egui;
 use u_monitor_core::{
-    CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, RegisterSnapshot, StorageVolume,
-    SystemIdentity, VirtualMemoryRegion,
+    CacheTopology, CpuInfo, MemoryBytes, MemoryReadRequest, PlatformResult, RegisterSnapshot,
+    StorageVolume, SystemIdentity, VirtualMemoryRegion,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +81,9 @@ impl Page {
             Self::Registers => {
                 "Панель регистров подключена: снимок текущего потока (другие потоки — отдельно)."
             }
-            Self::Cache => "Обнаружение топологии и счётчиков кэша ещё не реализовано.",
+            Self::Cache => {
+                "Панель кэша подключена: иерархия L1/L2/L3 и sharing (без содержимого линий)."
+            }
             Self::Simulation => {
                 "Модели ещё не реализованы. Будущие результаты будут явно помечены SIMULATED."
             }
@@ -97,6 +100,7 @@ pub(crate) struct MonitorApp {
     live: LiveTelemetry,
     memory: MemoryPanel,
     registers: RegistersPanel,
+    cache: PlatformResult<CacheTopology>,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
 }
@@ -111,6 +115,7 @@ impl MonitorApp {
         live: LiveTelemetry,
         regions: PlatformResult<Vec<VirtualMemoryRegion>>,
         registers: PlatformResult<RegisterSnapshot>,
+        cache: PlatformResult<CacheTopology>,
         read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
         refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
     ) -> Self {
@@ -129,6 +134,7 @@ impl MonitorApp {
             live,
             memory: MemoryPanel::new(regions),
             registers: RegistersPanel::new(registers),
+            cache,
             read_memory,
             refresh_registers,
         }
@@ -176,7 +182,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 09 · Registers").small().weak());
+                ui.label(egui::RichText::new("Этап 10 · Cache").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -197,6 +203,7 @@ impl MonitorApp {
                         let refresh = self.refresh_registers.as_ref();
                         self.registers.show(ui, refresh);
                     }
+                    Page::Cache => cache::show(ui, &self.cache),
                     page => panels::pending(ui, page),
                 }
             });
@@ -235,6 +242,7 @@ mod tests {
             live: LiveTelemetry::new(Err(DiagnosticError::PlatformError("test".into()))),
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
+            cache: PlatformResult::NotImplemented("test fixture".into()),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
         }

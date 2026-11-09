@@ -51,7 +51,12 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 ui.monospace(
                     if matches!(
                         page,
-                        Page::Ram | Page::Cpu | Page::Storage | Page::Memory | Page::Registers
+                        Page::Ram
+                            | Page::Cpu
+                            | Page::Storage
+                            | Page::Memory
+                            | Page::Registers
+                            | Page::Cache
                     ) {
                         "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                     } else {
@@ -72,6 +77,9 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 }
                 Page::Registers => {
                     "Снимок GPR текущего потока UI: HEX/DEC/BIN и Δ к предыдущему снимку."
+                }
+                Page::Cache => {
+                    "Иерархия кэшей CPU: уровень, тип, размер, линия, ассоциативность и sharing."
                 }
                 _ => page.pending(),
             });

@@ -14,6 +14,7 @@ fn stub_reports_no_implemented_hardware_features() {
         PlatformFeature::DiskStorage,
         PlatformFeature::HardwareRegisters,
         PlatformFeature::CurrentThreadRegisters,
+        PlatformFeature::CacheTopology,
     ] {
         assert_eq!(
             adapter.check_availability(feature),
