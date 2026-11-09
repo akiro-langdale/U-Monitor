@@ -1,8 +1,9 @@
 use std::os::raw::c_int;
 use u_monitor::{
-    UmAccessResult, UmAvailability, UmDataSource, UmFeature, UmHierarchyStats, UmRamInfo, UmStatus,
-    UmSystemIdentity, um_check_availability, um_hierarchy_access, um_hierarchy_create,
-    um_hierarchy_destroy, um_hierarchy_stats, um_ram_info, um_status_name, um_system_identity,
+    UmAccessResult, UmAvailability, UmCacheTopologyHeader, UmDataSource, UmFeature,
+    UmHierarchyStats, UmMemorySampleInfo, UmRamInfo, UmStatus, UmSystemIdentity, um_cache_topology,
+    um_check_availability, um_hierarchy_access, um_hierarchy_create, um_hierarchy_destroy,
+    um_hierarchy_stats, um_memory_sample, um_ram_info, um_status_name, um_system_identity,
     um_version,
 };
 
@@ -30,6 +31,25 @@ fn public_abi_smoke_preserves_provenance() {
 
     let mut ram = UmRamInfo::default();
     assert_eq!(um_ram_info(&mut ram), UmStatus::Ok);
+
+    let mut cache = UmCacheTopologyHeader::default();
+    assert_eq!(
+        um_cache_topology(&mut cache, std::ptr::null_mut(), 0),
+        UmStatus::Ok
+    );
+    assert_eq!(cache.source, UmDataSource::Measured);
+
+    let mut info = UmMemorySampleInfo::default();
+    let mut buffer = [0u8; 16];
+    let sample = um_memory_sample(0, 8, buffer.as_mut_ptr(), buffer.len(), &mut info);
+    assert!(matches!(
+        sample,
+        UmStatus::Ok
+            | UmStatus::Unavailable
+            | UmStatus::PermissionRequired
+            | UmStatus::PlatformError
+            | UmStatus::ValidationError
+    ));
 
     let handle = um_hierarchy_create();
     assert!(!handle.is_null());

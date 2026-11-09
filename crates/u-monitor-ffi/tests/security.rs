@@ -2,9 +2,10 @@
 
 use std::os::raw::c_char;
 use u_monitor::{
-    UmAccessResult, UmDataSource, UmHierarchyStats, UmRamInfo, UmStatus, UmSystemIdentity,
-    um_hierarchy_access, um_hierarchy_create, um_hierarchy_destroy, um_hierarchy_reset,
-    um_hierarchy_stats, um_ram_info, um_status_name, um_system_identity,
+    UmAccessResult, UmDataSource, UmHierarchyStats, UmMemorySampleInfo,
+    UmRamInfo, UmStatus, UmSystemIdentity, um_cache_topology, um_hierarchy_access,
+    um_hierarchy_create, um_hierarchy_destroy, um_hierarchy_reset, um_hierarchy_stats,
+    um_memory_sample, um_ram_info, um_status_name, um_system_identity,
 };
 
 #[test]
@@ -14,6 +15,20 @@ fn null_arguments_do_not_crash_and_report_null() {
         UmStatus::NullArgument
     );
     assert_eq!(um_ram_info(std::ptr::null_mut()), UmStatus::NullArgument);
+    assert_eq!(
+        um_cache_topology(std::ptr::null_mut(), std::ptr::null_mut(), 0),
+        UmStatus::NullArgument
+    );
+    let mut sample = UmMemorySampleInfo::default();
+    assert_eq!(
+        um_memory_sample(0, 1, std::ptr::null_mut(), 1, &mut sample),
+        UmStatus::NullArgument
+    );
+    let mut byte = 0u8;
+    assert_eq!(
+        um_memory_sample(0, 1, &mut byte, 1, std::ptr::null_mut()),
+        UmStatus::NullArgument
+    );
     assert_eq!(
         um_status_name(UmStatus::Ok, std::ptr::null_mut(), 8),
         UmStatus::NullArgument

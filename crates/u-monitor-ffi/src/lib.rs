@@ -14,15 +14,19 @@
 //! intentional for a C ABI and is exempt from `clippy::not_unsafe_ptr_arg_deref`.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+mod cache;
 mod convert;
 mod hierarchy;
 mod identity;
+mod memory_sample;
 mod ram;
 mod status;
 
-pub use convert::UmFieldU64;
+pub use cache::*;
+pub use convert::{UmFieldU32, UmFieldU64};
 pub use hierarchy::*;
 pub use identity::*;
+pub use memory_sample::*;
 pub use ram::*;
 pub use status::*;
 

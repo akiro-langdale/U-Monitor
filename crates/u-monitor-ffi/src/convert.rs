@@ -27,6 +27,27 @@ impl Default for UmFieldU64 {
     }
 }
 
+/// One optional `u32` field with MEASURED provenance when present.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UmFieldU32 {
+    pub status: UmStatus,
+    pub source: UmDataSource,
+    pub value: u32,
+    pub timestamp_unix_ms: i64,
+}
+
+impl Default for UmFieldU32 {
+    fn default() -> Self {
+        Self {
+            status: UmStatus::Unavailable,
+            source: UmDataSource::Measured,
+            value: 0,
+            timestamp_unix_ms: 0,
+        }
+    }
+}
+
 pub(crate) fn write_cstr(text: &str, buffer: *mut c_char, capacity: usize) -> UmStatus {
     if buffer.is_null() {
         return UmStatus::NullArgument;
@@ -93,6 +114,31 @@ pub(crate) fn result_status<T>(result: &PlatformResult<T>) -> UmStatus {
         PlatformResult::Unavailable(_) => UmStatus::Unavailable,
         PlatformResult::NotImplemented(_) => UmStatus::NotImplemented,
         PlatformResult::Error(_) => UmStatus::PlatformError,
+    }
+}
+
+/// Optional measured scalar from OS topology (missing stays unavailable).
+pub(crate) fn optional_measured_u64(value: Option<u64>, timestamp_unix_ms: i64) -> UmFieldU64 {
+    match value {
+        Some(value) => UmFieldU64 {
+            status: UmStatus::Ok,
+            source: UmDataSource::Measured,
+            value,
+            timestamp_unix_ms,
+        },
+        None => UmFieldU64::default(),
+    }
+}
+
+pub(crate) fn field_u32_optional(value: Option<u32>, timestamp_unix_ms: i64) -> UmFieldU32 {
+    match value {
+        Some(value) => UmFieldU32 {
+            status: UmStatus::Ok,
+            source: UmDataSource::Measured,
+            value,
+            timestamp_unix_ms,
+        },
+        None => UmFieldU32::default(),
     }
 }
 

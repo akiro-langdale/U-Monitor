@@ -94,6 +94,45 @@ typedef struct UmRamInfo {
     UmFieldU64 used_bytes;
 } UmRamInfo;
 
+typedef enum UmCacheKind {
+    UM_CACHE_DATA = 1,
+    UM_CACHE_INSTRUCTION = 2,
+    UM_CACHE_UNIFIED = 3,
+    UM_CACHE_TRACE = 4,
+    UM_CACHE_UNKNOWN = 5
+} UmCacheKind;
+
+typedef struct UmFieldU32 {
+    UmStatus status;
+    UmDataSource source;
+    uint32_t value;
+    int64_t timestamp_unix_ms;
+} UmFieldU32;
+
+typedef struct UmCacheNode {
+    uint32_t level;
+    UmCacheKind kind;
+    UmFieldU64 size_bytes;
+    UmFieldU32 line_size_bytes;
+    UmFieldU32 associativity;
+    uint8_t fully_associative;
+} UmCacheNode;
+
+typedef struct UmCacheTopologyHeader {
+    UmStatus status;
+    UmDataSource source;
+    int64_t timestamp_unix_ms;
+    size_t node_count;
+} UmCacheTopologyHeader;
+
+typedef struct UmMemorySampleInfo {
+    UmStatus status;
+    UmDataSource source;
+    uint64_t address;
+    size_t bytes_read;
+    int64_t timestamp_unix_ms;
+} UmMemorySampleInfo;
+
 typedef struct UmHierarchy UmHierarchy;
 
 typedef struct UmAccessResult {
@@ -123,6 +162,10 @@ UM_API UmStatus um_status_name(UmStatus status, char *buffer, size_t capacity);
 UM_API UmStatus um_system_identity(UmSystemIdentity *out);
 UM_API UmStatus um_check_availability(int feature, UmAvailability *out);
 UM_API UmStatus um_ram_info(UmRamInfo *out);
+UM_API UmStatus um_cache_topology(UmCacheTopologyHeader *header, UmCacheNode *nodes,
+                                    size_t capacity);
+UM_API UmStatus um_memory_sample(uint64_t address, size_t length, uint8_t *buffer, size_t capacity,
+                                 UmMemorySampleInfo *out);
 
 UM_API UmHierarchy *um_hierarchy_create(void);
 UM_API void um_hierarchy_destroy(UmHierarchy *handle);

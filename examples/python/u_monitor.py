@@ -88,6 +88,45 @@ class UmHierarchyStats(Structure):
     ]
 
 
+class UmFieldU32(Structure):
+    _fields_ = [
+        ("status", c_int),
+        ("source", c_int),
+        ("value", c_uint32),
+        ("timestamp_unix_ms", c_int64),
+    ]
+
+
+class UmCacheNode(Structure):
+    _fields_ = [
+        ("level", c_uint32),
+        ("kind", c_int),
+        ("size_bytes", UmFieldU64),
+        ("line_size_bytes", UmFieldU32),
+        ("associativity", UmFieldU32),
+        ("fully_associative", c_uint8),
+    ]
+
+
+class UmCacheTopologyHeader(Structure):
+    _fields_ = [
+        ("status", c_int),
+        ("source", c_int),
+        ("timestamp_unix_ms", c_int64),
+        ("node_count", c_uint64),
+    ]
+
+
+class UmMemorySampleInfo(Structure):
+    _fields_ = [
+        ("status", c_int),
+        ("source", c_int),
+        ("address", c_uint64),
+        ("bytes_read", c_uint64),
+        ("timestamp_unix_ms", c_int64),
+    ]
+
+
 def _library_name() -> str:
     if sys.platform.startswith("win"):
         return "u_monitor.dll"
@@ -135,6 +174,20 @@ def load_library(path: Path | None = None) -> ctypes.CDLL:
     lib.um_hierarchy_access.restype = c_int
     lib.um_hierarchy_stats.argtypes = [c_void_p, POINTER(UmHierarchyStats)]
     lib.um_hierarchy_stats.restype = c_int
+    lib.um_cache_topology.argtypes = [
+        POINTER(UmCacheTopologyHeader),
+        POINTER(UmCacheNode),
+        c_uint64,
+    ]
+    lib.um_cache_topology.restype = c_int
+    lib.um_memory_sample.argtypes = [
+        c_uint64,
+        c_uint64,
+        POINTER(c_uint8),
+        c_uint64,
+        POINTER(UmMemorySampleInfo),
+    ]
+    lib.um_memory_sample.restype = c_int
     return lib
 
 
@@ -160,6 +213,21 @@ def main() -> None:
             identity.process_architecture.decode("utf-8"),
             f"({source_name(identity.source)})",
         )
+
+    header = UmCacheTopologyHeader()
+    if lib.um_cache_topology(byref(header), None, 0) == UM_OK and header.status == UM_OK:
+        print("cache nodes:", header.node_count, f"({source_name(header.source)})")
+        if header.node_count:
+            nodes = (UmCacheNode * header.node_count)()
+            if lib.um_cache_topology(byref(header), nodes, header.node_count) == UM_OK:
+                first = nodes[0]
+                print(
+                    "cache L",
+                    first.level,
+                    "kind=",
+                    first.kind,
+                    f"({source_name(header.source)})",
+                )
 
     ram = UmRamInfo()
     if lib.um_ram_info(byref(ram)) == UM_OK and ram.total_bytes.status == UM_OK:
