@@ -106,6 +106,21 @@ Linux): база, размер, состояние, доступ и тип.
 cargo run -p u-monitor-ui
 ```
 
+## C ABI (`u-monitor-ffi`)
+
+Публичный C ABI собирается как `cdylib`/`staticlib` с именем `u_monitor`.
+Заголовок: `crates/u-monitor-ffi/include/u_monitor.h`.
+
+```powershell
+cargo build -p u-monitor-ffi
+python examples/python/u_monitor.py
+```
+
+Пример на C: `examples/c/main.c`. Владение: caller-owned структуры не
+освобождаются; opaque `UmHierarchy*` создаётся через `um_hierarchy_create` и
+уничтожается через `um_hierarchy_destroy`. Симуляция всегда возвращает
+`UM_SOURCE_SIMULATED`.
+
 На страницах CPU и RAM можно выбрать общий интервал от 250 до 5000 мс —
 оба раздела читают один `TelemetryWorker`. График RAM показывает долю
 используемой памяти (`CALCULATED`: используется / общий объём). График CPU
