@@ -83,6 +83,10 @@ Linux): база, размер, состояние, доступ и тип.
 `/sys/devices/system/cpu/*/cache/index*`. Содержимое кэш-линий недоступно и
 не реконструируется.
 
+Страница «Симуляция» запускает учебную модель иерархии L1→L2→RAM
+(set-associative LRU) из `u-monitor-simulation`. Hit/miss, eviction и latency
+всегда помечены `SIMULATED` и не смешиваются с MEASURED-данными платформы.
+
 ```powershell
 cargo run -p u-monitor-ui
 ```

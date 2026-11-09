@@ -1,6 +1,6 @@
 use crate::app::Page;
 use eframe::egui;
-use u_monitor_core::{Availability, DataSource, PlatformResult, SystemIdentity};
+use u_monitor_core::{DataSource, PlatformResult, SystemIdentity};
 
 pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdentity>) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -57,6 +57,7 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                             | Page::Memory
                             | Page::Registers
                             | Page::Cache
+                            | Page::Simulation
                     ) {
                         "ПАНЕЛЬ ПОДКЛЮЧЕНА"
                     } else {
@@ -81,17 +82,12 @@ pub(crate) fn overview(ui: &mut egui::Ui, identity: &PlatformResult<SystemIdenti
                 Page::Cache => {
                     "Иерархия кэшей CPU: уровень, тип, размер, линия, ассоциативность и sharing."
                 }
-                _ => page.pending(),
+                Page::Simulation => {
+                    "Учебная модель L1→L2→RAM: hit/miss, eviction и latency только как SIMULATED."
+                }
+                Page::Overview => page.pending(),
             });
         });
         ui.add_space(6.0);
     }
-}
-
-pub(crate) fn pending(ui: &mut egui::Ui, page: Page) {
-    egui::Frame::group(ui.style()).show(ui, |ui| {
-        ui.monospace(Availability::NotImplemented.to_string());
-        ui.add_space(12.0);
-        ui.label(page.pending());
-    });
 }

@@ -1,6 +1,6 @@
 use crate::{
     cache, cpu, live::LiveTelemetry, memory::MemoryPanel, panels, registers::RegistersPanel,
-    storage,
+    simulation::SimulationPanel, storage,
 };
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
@@ -85,7 +85,7 @@ impl Page {
                 "Панель кэша подключена: иерархия L1/L2/L3 и sharing (без содержимого линий)."
             }
             Self::Simulation => {
-                "Модели ещё не реализованы. Будущие результаты будут явно помечены SIMULATED."
+                "Панель симуляции подключена: учебная модель L1/L2/RAM с пометкой SIMULATED."
             }
         }
     }
@@ -101,6 +101,7 @@ pub(crate) struct MonitorApp {
     memory: MemoryPanel,
     registers: RegistersPanel,
     cache: PlatformResult<CacheTopology>,
+    simulation: SimulationPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
 }
@@ -135,6 +136,7 @@ impl MonitorApp {
             memory: MemoryPanel::new(regions),
             registers: RegistersPanel::new(registers),
             cache,
+            simulation: SimulationPanel::new(),
             read_memory,
             refresh_registers,
         }
@@ -182,7 +184,7 @@ impl MonitorApp {
                 }
                 ui.add_space(24.0);
                 ui.separator();
-                ui.label(egui::RichText::new("Этап 10 · Cache").small().weak());
+                ui.label(egui::RichText::new("Этап 12 · Simulation").small().weak());
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -204,7 +206,7 @@ impl MonitorApp {
                         self.registers.show(ui, refresh);
                     }
                     Page::Cache => cache::show(ui, &self.cache),
-                    page => panels::pending(ui, page),
+                    Page::Simulation => self.simulation.show(ui),
                 }
             });
         });
@@ -243,6 +245,7 @@ mod tests {
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             cache: PlatformResult::NotImplemented("test fixture".into()),
+            simulation: SimulationPanel::new(),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
         }

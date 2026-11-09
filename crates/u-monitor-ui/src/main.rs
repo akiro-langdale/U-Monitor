@@ -6,6 +6,7 @@ mod memory;
 mod panels;
 mod ram;
 mod registers;
+mod simulation;
 mod storage;
 
 use app::MonitorApp;
