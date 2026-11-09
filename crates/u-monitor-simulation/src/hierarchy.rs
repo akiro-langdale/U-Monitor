@@ -1,7 +1,9 @@
 //! Set-associative LRU hierarchy: L1 → L2 → RAM. Values are model outputs only.
 
 use std::time::SystemTime;
-use u_monitor_core::{DataSource, DiagnosticError, Measurement, PlatformResult};
+use u_monitor_core::{
+    CacheKind, CacheNode, CacheTopology, DataSource, DiagnosticError, Measurement, PlatformResult,
+};
 
 /// Logical level visited while resolving an address in the model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +144,117 @@ impl HierarchyConfig {
         }
         Ok(())
     }
+
+    /// Seeds educational defaults from MEASURED topology metadata when present.
+    /// Missing fields keep defaults; the result remains a SIMULATED model config.
+    pub fn from_cache_topology(topology: &CacheTopology) -> SeededHierarchyConfig {
+        let mut config = Self::default();
+        let mut notes = Vec::new();
+        let mut used_measured = false;
+
+        if let Some(line) = topology
+            .nodes
+            .iter()
+            .filter_map(|node| node.line_size_bytes)
+            .find(|size| *size > 0 && size.is_power_of_two())
+        {
+            config.l1.line_size_bytes = line;
+            config.l2.line_size_bytes = line;
+            notes.push(format!("line size seeded from MEASURED topology: {line} B"));
+            used_measured = true;
+        }
+
+        if let Some(l1) = pick_level(topology, 1)
+            && let Some(level) = level_from_node(l1, config.l1)
+        {
+            config.l1 = level;
+            notes.push(format!(
+                "L1 seeded from MEASURED node ({} B, {}-way)",
+                l1.size_bytes.unwrap_or(0),
+                config.l1.ways
+            ));
+            used_measured = true;
+        }
+        if let Some(l2) = pick_level(topology, 2)
+            && let Some(level) = level_from_node(l2, config.l2)
+        {
+            config.l2 = level;
+            notes.push(format!(
+                "L2 seeded from MEASURED node ({} B, {}-way)",
+                l2.size_bytes.unwrap_or(0),
+                config.l2.ways
+            ));
+            used_measured = true;
+        }
+
+        if !used_measured {
+            notes.push(
+                "MEASURED topology lacked usable L1/L2 metadata; using model defaults".into(),
+            );
+        }
+        // Align line sizes after partial seeding.
+        if config.l1.line_size_bytes != config.l2.line_size_bytes {
+            config.l2.line_size_bytes = config.l1.line_size_bytes;
+            notes.push("aligned L2 line size to L1 for this model".into());
+        }
+        if config.validate().is_err() {
+            notes.push("seeded config invalid; falling back to defaults".into());
+            return SeededHierarchyConfig {
+                config: Self::default(),
+                seeded_from_measured: false,
+                notes,
+            };
+        }
+        SeededHierarchyConfig {
+            config,
+            seeded_from_measured: used_measured,
+            notes,
+        }
+    }
+}
+
+/// Result of seeding [`HierarchyConfig`] from measured cache topology.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeededHierarchyConfig {
+    pub config: HierarchyConfig,
+    pub seeded_from_measured: bool,
+    pub notes: Vec<String>,
+}
+
+fn pick_level(topology: &CacheTopology, level: u32) -> Option<&CacheNode> {
+    topology.nodes.iter().find(|node| {
+        node.level == level
+            && matches!(
+                node.kind,
+                CacheKind::Data | CacheKind::Unified | CacheKind::Unknown
+            )
+            && node.size_bytes.is_some_and(|size| size > 0)
+    })
+}
+
+fn level_from_node(node: &CacheNode, defaults: LevelConfig) -> Option<LevelConfig> {
+    let size = node.size_bytes?;
+    let line = node
+        .line_size_bytes
+        .filter(|size| *size > 0 && size.is_power_of_two())
+        .unwrap_or(defaults.line_size_bytes);
+    let ways = if node.fully_associative {
+        // Cap fully-associative models so the educational simulator stays tractable.
+        ((size / u64::from(line)).clamp(1, 64)) as usize
+    } else {
+        node.associativity
+            .filter(|ways| *ways > 0)
+            .map(|ways| ways as usize)
+            .unwrap_or(defaults.ways)
+            .clamp(1, 64)
+    };
+    let sets = (size / (u64::from(line) * ways as u64)).max(1) as usize;
+    Some(LevelConfig {
+        sets: sets.clamp(1, 4096),
+        ways,
+        line_size_bytes: line,
+        hit_latency_ns: defaults.hit_latency_ns,
+    })
 }
 
 /// Demo addresses for the UI: stride across lines to exercise hits and misses.
@@ -438,6 +551,39 @@ mod tests {
             PlatformResult::Error(DiagnosticError::SimulationError(_))
         ));
         assert_eq!(sim.stats().value, before);
+    }
+
+    #[test]
+    fn seeds_from_measured_topology_without_claiming_hardware_counters() {
+        let topology = CacheTopology {
+            nodes: vec![
+                CacheNode {
+                    level: 1,
+                    kind: CacheKind::Data,
+                    size_bytes: Some(32 * 1024),
+                    line_size_bytes: Some(64),
+                    associativity: Some(8),
+                    fully_associative: false,
+                    shared_logical_processors: vec![0],
+                },
+                CacheNode {
+                    level: 2,
+                    kind: CacheKind::Unified,
+                    size_bytes: Some(256 * 1024),
+                    line_size_bytes: Some(64),
+                    associativity: Some(8),
+                    fully_associative: false,
+                    shared_logical_processors: vec![0, 1],
+                },
+            ],
+        };
+        let seeded = HierarchyConfig::from_cache_topology(&topology);
+        assert!(seeded.seeded_from_measured);
+        assert_eq!(seeded.config.l1.line_size_bytes, 64);
+        assert_eq!(seeded.config.l1.sets, 64); // 32KiB / (64 * 8)
+        assert_eq!(seeded.config.l2.sets, 512); // 256KiB / (64 * 8)
+        let mut sim = HierarchySimulator::try_new(seeded.config).unwrap();
+        assert_eq!(sim.access(0x1000).source, DataSource::Simulated);
     }
 
     #[test]

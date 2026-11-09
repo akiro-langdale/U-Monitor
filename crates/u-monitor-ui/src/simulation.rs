@@ -1,17 +1,23 @@
 //! Memory-hierarchy simulation panel. All values shown here are SIMULATED.
 use eframe::egui;
 use std::time::{Duration, Instant};
+use u_monitor_core::{CacheTopology, PlatformResult};
 use u_monitor_simulation::{
-    AccessResult, DEFAULT_DEMO_ADDRESSES, HierarchySimulator, HierarchyStats, MemoryLevel,
+    AccessEvent, AccessResult, DEFAULT_DEMO_ADDRESSES, DiskAccessResult, DiskLatencyModel,
+    HierarchyConfig, HierarchySimulator, HierarchyStats, MemoryLevel, SeededHierarchyConfig,
 };
 
 pub(crate) struct SimulationPanel {
     simulator: HierarchySimulator,
+    seed: SeededHierarchyConfig,
     last: Option<AccessResult>,
     stats: HierarchyStats,
     demo_index: usize,
     custom_address: String,
     playback: Option<Playback>,
+    disk: DiskLatencyModel,
+    disk_size_kib: u64,
+    last_disk: Option<DiskAccessResult>,
 }
 
 struct Playback {
@@ -21,24 +27,47 @@ struct Playback {
 }
 
 impl SimulationPanel {
-    pub(crate) fn new() -> Self {
-        let simulator = HierarchySimulator::new_default();
+    pub(crate) fn new(cache: &PlatformResult<CacheTopology>) -> Self {
+        let seed = match cache {
+            PlatformResult::Success(measurement) => {
+                HierarchyConfig::from_cache_topology(&measurement.value)
+            }
+            _ => SeededHierarchyConfig {
+                config: HierarchyConfig::default(),
+                seeded_from_measured: false,
+                notes: vec!["Cache topology unavailable; using educational defaults".into()],
+            },
+        };
+        let simulator = HierarchySimulator::try_new(seed.config)
+            .unwrap_or_else(|_| HierarchySimulator::new_default());
         Self {
             stats: simulator.stats().value,
             simulator,
+            seed,
             last: None,
             demo_index: 0,
             custom_address: "0x1000".into(),
             playback: None,
+            disk: DiskLatencyModel::default(),
+            disk_size_kib: 4,
+            last_disk: None,
         }
     }
 
     pub(crate) fn show(&mut self, ui: &mut egui::Ui) {
         ui.label(
-            "Эта панель запускает учебную модель L1→L2→RAM (set-associative LRU). Все latency, hit/miss и трассировки помечены SIMULATED и не смешиваются с MEASURED данными ОС.",
+            "Эта панель запускает учебную модель L1→L2→RAM (set-associative LRU) и отдельную SIMULATED модель latency диска. Значения не смешиваются с MEASURED данными ОС.",
         );
         ui.add_space(8.0);
         ui.monospace("SIMULATED");
+        ui.small(if self.seed.seeded_from_measured {
+            "Конфиг иерархии частично seeded из MEASURED CacheTopology (размеры/ways/line)."
+        } else {
+            "Конфиг иерархии — educational defaults (topology seed недоступен)."
+        });
+        for note in &self.seed.notes {
+            ui.small(format!("· {note}"));
+        }
 
         let config = self.simulator.config();
         ui.add_space(8.0);
@@ -82,6 +111,7 @@ impl SimulationPanel {
                 self.last = None;
                 self.playback = None;
                 self.demo_index = 0;
+                self.last_disk = None;
             }
         });
 
@@ -108,9 +138,11 @@ impl SimulationPanel {
         self.show_stats(ui);
         ui.add_space(12.0);
         self.show_trace(ui);
+        ui.add_space(16.0);
+        self.show_disk(ui);
 
         if self.playback.is_some() {
-            ui.ctx().request_repaint_after(Duration::from_millis(32));
+            ui.ctx().request_repaint_after(Duration::from_millis(16));
         }
     }
 
@@ -122,7 +154,7 @@ impl SimulationPanel {
         self.playback = Some(Playback {
             result: measurement.value,
             started: Instant::now(),
-            step_ms: 450,
+            step_ms: 320,
         });
     }
 
@@ -137,21 +169,56 @@ impl SimulationPanel {
     }
 
     fn show_hierarchy(&mut self, ui: &mut egui::Ui) {
-        let active_level = self.active_step_index().and_then(|index| {
+        let active = self.active_step_index().and_then(|index| {
             self.playback
                 .as_ref()
-                .and_then(|playback| playback.result.steps.get(index).map(|step| step.level))
+                .and_then(|playback| playback.result.steps.get(index).copied())
         });
+        let pulse = ((ui.input(|i| i.time) * 6.0).sin() * 0.5 + 0.5) as f32;
         ui.heading("Путь доступа");
         ui.horizontal(|ui| {
-            level_box(ui, "CPU", false);
+            level_box(ui, "CPU", false, None, pulse);
             ui.label("→");
-            level_box(ui, "L1", active_level == Some(MemoryLevel::L1));
+            level_box(
+                ui,
+                "L1",
+                active.is_some_and(|step| step.level == MemoryLevel::L1),
+                active
+                    .filter(|step| step.level == MemoryLevel::L1)
+                    .map(|s| s.event),
+                pulse,
+            );
             ui.label("→");
-            level_box(ui, "L2", active_level == Some(MemoryLevel::L2));
+            level_box(
+                ui,
+                "L2",
+                active.is_some_and(|step| step.level == MemoryLevel::L2),
+                active
+                    .filter(|step| step.level == MemoryLevel::L2)
+                    .map(|s| s.event),
+                pulse,
+            );
             ui.label("→");
-            level_box(ui, "RAM", active_level == Some(MemoryLevel::Ram));
+            level_box(
+                ui,
+                "RAM",
+                active.is_some_and(|step| step.level == MemoryLevel::Ram),
+                active
+                    .filter(|step| step.level == MemoryLevel::Ram)
+                    .map(|s| s.event),
+                pulse,
+            );
         });
+        if let Some(step) = active {
+            ui.colored_label(
+                event_color(ui, step.event),
+                format!(
+                    "Активный шаг: {} · {}",
+                    step.level.label(),
+                    step.event.label()
+                ),
+            );
+        }
         if let Some(result) = &self.last {
             ui.add_space(6.0);
             ui.label(format!(
@@ -213,27 +280,77 @@ impl SimulationPanel {
                         step.event.label()
                     );
                     if Some(index) == active {
-                        ui.colored_label(ui.visuals().strong_text_color(), label);
+                        ui.colored_label(event_color(ui, step.event), label);
                     } else {
                         ui.monospace(label);
                     }
                 }
             });
     }
+
+    fn show_disk(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Диск (отдельная SIMULATED модель)");
+        ui.label(
+            "Не смешивается с RAM/cache stats и не использует MEASURED Disk I/O. Только учебная latency оценка.",
+        );
+        ui.horizontal(|ui| {
+            ui.label("Размер KiB");
+            ui.add(egui::DragValue::new(&mut self.disk_size_kib).range(1..=64 * 1024));
+            if ui.button("Оценить latency").clicked() {
+                let measurement = self.disk.estimate(self.disk_size_kib.saturating_mul(1024));
+                debug_assert_eq!(measurement.source, u_monitor_core::DataSource::Simulated);
+                self.last_disk = Some(measurement.value);
+            }
+        });
+        if let Some(result) = &self.last_disk {
+            ui.monospace("SIMULATED");
+            ui.label(format!(
+                "{} B → {} ns (base {} + transfer {})",
+                result.size_bytes,
+                result.latency_ns,
+                result.base_latency_ns,
+                result.transfer_latency_ns
+            ));
+        }
+    }
 }
 
-fn level_box(ui: &mut egui::Ui, label: &str, active: bool) {
-    let fill = if active {
-        ui.visuals().selection.bg_fill
+fn event_color(ui: &egui::Ui, event: AccessEvent) -> egui::Color32 {
+    match event {
+        AccessEvent::Hit | AccessEvent::Fill => ui.visuals().selection.bg_fill,
+        AccessEvent::Miss | AccessEvent::Evict => ui.visuals().warn_fg_color,
+        AccessEvent::Probe | AccessEvent::Fetch => ui.visuals().strong_text_color(),
+    }
+}
+
+fn level_box(ui: &mut egui::Ui, label: &str, active: bool, event: Option<AccessEvent>, pulse: f32) {
+    let base = if active {
+        event
+            .map(|event| event_color(ui, event))
+            .unwrap_or_else(|| ui.visuals().selection.bg_fill)
     } else {
         ui.visuals().widgets.inactive.bg_fill
+    };
+    let fill = if active {
+        egui::Color32::from_rgba_unmultiplied(
+            base.r(),
+            base.g(),
+            base.b(),
+            (180.0 + 75.0 * pulse) as u8,
+        )
+    } else {
+        base
     };
     egui::Frame::NONE
         .fill(fill)
         .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
         .inner_margin(egui::Margin::symmetric(10, 8))
+        .corner_radius(4.0)
         .show(ui, |ui| {
             ui.monospace(label);
+            if let Some(event) = event {
+                ui.small(event.label());
+            }
         });
 }
 
@@ -260,11 +377,12 @@ mod tests {
     #[test]
     fn panel_renders_initial_simulated_state() {
         let ctx = egui::Context::default();
-        let mut panel = SimulationPanel::new();
+        let mut panel = SimulationPanel::new(&PlatformResult::NotImplemented("fixture".into()));
         let output = ctx.run(egui::RawInput::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| panel.show(ui));
         });
         assert!(!output.shapes.is_empty());
         assert_eq!(panel.stats.accesses, 0);
+        assert!(!panel.seed.seeded_from_measured);
     }
 }

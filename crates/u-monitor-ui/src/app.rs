@@ -164,9 +164,9 @@ impl MonitorApp {
             processes: ProcessesPanel::new(processes, target),
             memory: MemoryPanel::new(regions),
             registers: RegistersPanel::new(registers),
+            simulation: SimulationPanel::new(&cache),
             cache,
             cache_counters,
-            simulation: SimulationPanel::new(),
             read_memory,
             refresh_registers,
             thread_registers,
@@ -320,7 +320,9 @@ mod tests {
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             cache: PlatformResult::NotImplemented("test fixture".into()),
             cache_counters: PlatformResult::NotImplemented("test fixture".into()),
-            simulation: SimulationPanel::new(),
+            simulation: SimulationPanel::new(&PlatformResult::NotImplemented(
+                "test fixture".into(),
+            )),
             read_memory: Box::new(|_| PlatformResult::NotImplemented("test fixture".into())),
             refresh_registers: Box::new(|| PlatformResult::NotImplemented("test fixture".into())),
             thread_registers: Box::new(|_, _| {
