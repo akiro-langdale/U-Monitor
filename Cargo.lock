@@ -2881,7 +2881,7 @@ dependencies = [
 
 [[package]]
 name = "u-monitor-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "thiserror 1.0.69",
@@ -2889,7 +2889,7 @@ dependencies = [
 
 [[package]]
 name = "u-monitor-ffi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "u-monitor-core",
  "u-monitor-platform",
@@ -2898,7 +2898,7 @@ dependencies = [
 
 [[package]]
 name = "u-monitor-platform"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "libc",
  "mach2",
@@ -2910,14 +2910,14 @@ dependencies = [
 
 [[package]]
 name = "u-monitor-simulation"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "u-monitor-core",
 ]
 
 [[package]]
 name = "u-monitor-telemetry"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "u-monitor-core",
  "u-monitor-platform",
@@ -2925,7 +2925,7 @@ dependencies = [
 
 [[package]]
 name = "u-monitor-ui"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "eframe",
  "tracing",

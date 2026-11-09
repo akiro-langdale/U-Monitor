@@ -22,8 +22,8 @@ Artifacts:
 Push a version tag to trigger `.github/workflows/release.yml`:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 CI builds release binaries for Ubuntu, Windows, and macOS and uploads them as
