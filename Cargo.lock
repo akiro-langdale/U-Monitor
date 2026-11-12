@@ -2880,6 +2880,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "u-library-cache"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "windows",
+]
+
+[[package]]
+name = "u-library-core"
+version = "0.1.0"
+
+[[package]]
+name = "u-library-gpu"
+version = "0.1.0"
+dependencies = [
+ "windows",
+]
+
+[[package]]
+name = "u-library-memory"
+version = "0.1.0"
+dependencies = [
+ "mach2",
+ "u-library-core",
+ "windows",
+]
+
+[[package]]
+name = "u-library-registers"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "windows",
+]
+
+[[package]]
 name = "u-monitor-core"
 version = "1.0.0"
 dependencies = [
@@ -2904,6 +2940,10 @@ dependencies = [
  "mach2",
  "sysinfo",
  "tracing",
+ "u-library-cache",
+ "u-library-core",
+ "u-library-memory",
+ "u-library-registers",
  "u-monitor-core",
  "windows",
 ]
@@ -2930,6 +2970,8 @@ dependencies = [
  "eframe",
  "tracing",
  "tracing-subscriber",
+ "u-library-core",
+ "u-library-gpu",
  "u-monitor-core",
  "u-monitor-platform",
  "u-monitor-simulation",

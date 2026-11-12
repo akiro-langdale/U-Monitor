@@ -1,5 +1,9 @@
-use u_monitor_core::{Availability, DataSource, PlatformAdapter, PlatformFeature, PlatformResult};
-use u_monitor_platform::{NativePlatformAdapter, StubPlatformAdapter};
+#[cfg(any(windows, target_os = "linux"))]
+use u_monitor_core::DataSource;
+use u_monitor_core::{Availability, PlatformAdapter, PlatformFeature, PlatformResult};
+#[cfg(any(windows, target_os = "linux"))]
+use u_monitor_platform::NativePlatformAdapter;
+use u_monitor_platform::StubPlatformAdapter;
 
 #[test]
 fn stub_does_not_invent_cache_topology() {

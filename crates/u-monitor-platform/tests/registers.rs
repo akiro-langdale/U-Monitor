@@ -1,8 +1,9 @@
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+#[cfg(any(all(windows, target_arch = "x86_64"), target_os = "linux"))]
+use std::{sync::mpsc, thread, time::Duration};
 use u_monitor_core::{Availability, PlatformAdapter, PlatformFeature, PlatformResult};
-use u_monitor_platform::{NativePlatformAdapter, StubPlatformAdapter};
+#[cfg(any(all(windows, target_arch = "x86_64"), target_os = "linux"))]
+use u_monitor_platform::NativePlatformAdapter;
+use u_monitor_platform::StubPlatformAdapter;
 
 #[test]
 fn stub_does_not_invent_register_snapshots() {

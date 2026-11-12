@@ -7,6 +7,10 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
+u-library-core = { path = "../../../U-Library/crates/u-library-core" }
+u-library-memory = { path = "../../../U-Library/crates/u-library-memory" }
+u-library-registers = { path = "../../../U-Library/crates/u-library-registers" }
+u-library-cache = { path = "../../../U-Library/crates/u-library-cache" }
 u-monitor-core = { path = "../u-monitor-core" }
 sysinfo = { workspace = true }
 tracing = { workspace = true }

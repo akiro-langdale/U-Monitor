@@ -2,10 +2,10 @@
 
 use std::os::raw::c_char;
 use u_monitor::{
-    UmAccessResult, UmDataSource, UmHierarchyStats, UmMemorySampleInfo,
-    UmRamInfo, UmStatus, UmSystemIdentity, um_cache_topology, um_hierarchy_access,
-    um_hierarchy_create, um_hierarchy_destroy, um_hierarchy_reset, um_hierarchy_stats,
-    um_memory_sample, um_ram_info, um_status_name, um_system_identity,
+    UmAccessResult, UmDataSource, UmHierarchyStats, UmMemorySampleInfo, UmRamInfo, UmStatus,
+    UmSystemIdentity, um_cache_topology, um_hierarchy_access, um_hierarchy_create,
+    um_hierarchy_destroy, um_hierarchy_reset, um_hierarchy_stats, um_memory_sample, um_ram_info,
+    um_status_name, um_system_identity,
 };
 
 #[test]

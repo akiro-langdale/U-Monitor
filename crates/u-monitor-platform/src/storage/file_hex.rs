@@ -1,10 +1,8 @@
-//! Read-only capped samples from user-selected regular files.
+//! Adapts U-Library file samples to the monitor's measurement types.
 
-use std::{
-    fs::File,
-    io::{Read, Seek, SeekFrom},
-    time::SystemTime,
-};
+use std::{io::ErrorKind, path::Path};
+use u_library_core::ReadError;
+use u_library_memory::FileSource;
 use u_monitor_core::{
     DataSource, DiagnosticError, FileBytes, FileReadRequest, Measurement, PlatformResult,
 };
@@ -18,83 +16,38 @@ pub(crate) fn read_file_bytes(request: FileReadRequest) -> PlatformResult<FileBy
         return PlatformResult::Unavailable("File sample length must be greater than zero".into());
     }
 
-    let metadata = match std::fs::metadata(&request.path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            return PlatformResult::PermissionRequired(format!(
-                "metadata({}) denied: {error}",
-                request.path.display()
-            ));
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return PlatformResult::Unavailable(format!(
-                "file not found: {}",
-                request.path.display()
-            ));
-        }
-        Err(error) => {
-            return PlatformResult::Error(DiagnosticError::PlatformError(format!(
-                "metadata({}) failed: {error}",
-                request.path.display()
-            )));
-        }
-    };
-
-    if !metadata.is_file() {
-        return PlatformResult::Unavailable(format!(
-            "{} is not a regular file; raw devices are not opened for hex samples",
-            request.path.display()
-        ));
-    }
-
-    let mut file = match File::open(&request.path) {
+    let mut file = match FileSource::open(&request.path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            return PlatformResult::PermissionRequired(format!(
-                "open({}) denied: {error}",
-                request.path.display()
-            ));
-        }
-        Err(error) => {
-            return PlatformResult::Error(DiagnosticError::PlatformError(format!(
-                "open({}) failed: {error}",
-                request.path.display()
-            )));
-        }
+        Err(error) => return file_error("open", &request.path, error),
     };
-
-    if let Err(error) = file.seek(SeekFrom::Start(request.offset)) {
-        return PlatformResult::Error(DiagnosticError::PlatformError(format!(
-            "seek({}) failed: {error}",
-            request.path.display()
-        )));
-    }
-
-    let mut bytes = vec![0_u8; length];
-    let read = match file.read(&mut bytes) {
-        Ok(read) => read,
-        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            return PlatformResult::PermissionRequired(format!(
-                "read({}) denied: {error}",
-                request.path.display()
-            ));
-        }
-        Err(error) => {
-            return PlatformResult::Error(DiagnosticError::PlatformError(format!(
-                "read({}) failed: {error}",
-                request.path.display()
-            )));
-        }
+    let mut bytes = vec![0; length];
+    let receipt = match file.read_at(request.offset, &mut bytes) {
+        Ok(receipt) => receipt,
+        Err(error) => return file_error("read", &request.path, error),
     };
-    bytes.truncate(read);
+    bytes.truncate(receipt.bytes_read);
 
     PlatformResult::Success(Measurement {
         value: FileBytes {
             path: request.path,
-            offset: request.offset,
+            offset: receipt.address,
             bytes,
         },
         source: DataSource::Measured,
-        timestamp: SystemTime::now().into(),
+        timestamp: receipt.captured_at.into(),
     })
+}
+
+fn file_error(operation: &str, path: &Path, error: ReadError) -> PlatformResult<FileBytes> {
+    let message = format!("{operation}({}): {error}", path.display());
+    match error {
+        ReadError::Io(error) if error.kind() == ErrorKind::PermissionDenied => {
+            PlatformResult::PermissionRequired(message)
+        }
+        ReadError::Io(error) if error.kind() == ErrorKind::NotFound => {
+            PlatformResult::Unavailable(message)
+        }
+        ReadError::UnsupportedSource => PlatformResult::Unavailable(message),
+        _ => PlatformResult::Error(DiagnosticError::PlatformError(message)),
+    }
 }

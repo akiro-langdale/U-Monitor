@@ -2,9 +2,7 @@
 use crate::{cpu::history::CpuHistory, ram::history::RamHistory, storage::history::DiskIoHistory};
 use eframe::egui;
 use std::{sync::mpsc::TryRecvError, time::Duration};
-use u_monitor_core::{
-    CpuUsagePercent, DataSource, DiagnosticError, LogicalCpuUsage, PlatformResult,
-};
+use u_monitor_core::{CpuUsagePercent, DiagnosticError, LogicalCpuUsage, PlatformResult};
 use u_monitor_telemetry::{TelemetrySnapshot, TelemetryWorker};
 
 pub(crate) struct LiveTelemetry {
@@ -20,6 +18,14 @@ pub(crate) struct LiveTelemetry {
 }
 
 impl LiveTelemetry {
+    pub(crate) fn latest(&self) -> Option<&TelemetrySnapshot> {
+        self.latest.as_ref()
+    }
+
+    pub(crate) fn is_live(&self) -> bool {
+        self.worker.is_some() && !self.disconnected && self.latest.is_some()
+    }
+
     pub(crate) fn new(worker: Result<TelemetryWorker, DiagnosticError>) -> Self {
         let (worker, error) = match worker {
             Ok(w) => (Some(w), None),
@@ -153,11 +159,7 @@ impl LiveTelemetry {
         ui.monospace(snapshot.disk.availability().to_string());
         match &snapshot.disk {
             PlatformResult::Success(measurement) => {
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
                 rate_row(ui, "Чтение", &measurement.value.read_bytes_per_sec);
                 rate_row(ui, "Запись", &measurement.value.write_bytes_per_sec);
@@ -209,11 +211,7 @@ impl LiveTelemetry {
         match &snapshot.cpu {
             PlatformResult::Success(measurement) => {
                 let metrics = &measurement.value;
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 ui.small(format!(
                     "Интервал измерения счётчиков: {:.0} мс · UTC {}",
                     metrics.sampling_interval.as_secs_f64() * 1000.0,
@@ -248,11 +246,7 @@ fn rate_row(ui: &mut egui::Ui, label: &str, result: &PlatformResult<f64>) {
         match result {
             PlatformResult::Success(measurement) => {
                 ui.monospace(format_bps(measurement.value));
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
             }
             other => {
                 ui.monospace(other.availability().to_string());
@@ -281,11 +275,7 @@ fn ram_metric(ui: &mut egui::Ui, label: &str, result: &PlatformResult<u64>) {
                     m.value,
                     m.value as f64 / 1_073_741_824.0
                 ));
-                ui.monospace(match m.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, m.source);
                 ui.small(format!("UTC {}", m.timestamp.to_rfc3339()));
             }
             PlatformResult::PermissionRequired(r)
@@ -422,7 +412,7 @@ mod tests {
     fn field(value: u64) -> PlatformResult<u64> {
         PlatformResult::Success(Measurement {
             value,
-            source: DataSource::Measured,
+            source: u_monitor_core::DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         })
     }
@@ -439,7 +429,7 @@ mod tests {
                         available_bytes: field(0),
                         used_bytes: field(10),
                     },
-                    source: DataSource::Measured,
+                    source: u_monitor_core::DataSource::Measured,
                     timestamp: UNIX_EPOCH.into(),
                 }),
                 PlatformResult::Unavailable("warmup".into()),
@@ -486,7 +476,7 @@ mod tests {
                     sampling_interval: Duration::from_millis(250),
                     total_usage: PlatformResult::Success(Measurement {
                         value: CpuUsagePercent::try_from(37.5).unwrap(),
-                        source: DataSource::Measured,
+                        source: u_monitor_core::DataSource::Measured,
                         timestamp: UNIX_EPOCH.into(),
                     }),
                     logical_processors: vec![LogicalCpuUsage {
@@ -494,22 +484,22 @@ mod tests {
                         name: "cpu0".into(),
                         usage: PlatformResult::Success(Measurement {
                             value: CpuUsagePercent::try_from(12.0).unwrap(),
-                            source: DataSource::Measured,
+                            source: u_monitor_core::DataSource::Measured,
                             timestamp: UNIX_EPOCH.into(),
                         }),
                         current_mhz: PlatformResult::Success(Measurement {
                             value: 3200,
-                            source: DataSource::Measured,
+                            source: u_monitor_core::DataSource::Measured,
                             timestamp: UNIX_EPOCH.into(),
                         }),
                         max_mhz: PlatformResult::Success(Measurement {
                             value: 4800,
-                            source: DataSource::Measured,
+                            source: u_monitor_core::DataSource::Measured,
                             timestamp: UNIX_EPOCH.into(),
                         }),
                     }],
                 },
-                source: DataSource::Measured,
+                source: u_monitor_core::DataSource::Measured,
                 timestamp: UNIX_EPOCH.into(),
             }),
             disk: PlatformResult::NotImplemented("test fixture".into()),

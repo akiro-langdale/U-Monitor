@@ -1,25 +1,47 @@
-//! Register capture for the current thread and consented other threads.
-#[cfg(all(windows, target_arch = "x86_64"))]
-mod windows_x64;
-#[cfg(all(windows, target_arch = "x86_64"))]
-mod windows_x64_thread;
+//! Register capture via U-Library.
 
-#[cfg(target_os = "linux")]
-mod linux;
+use std::time::SystemTime;
+use u_library_registers::{self, RegisterError};
+use u_monitor_core::{
+    DataSource, Measurement, PlatformResult, ProcessId, RegisterArchitecture, RegisterSnapshot,
+    RegisterValue, ThreadId,
+};
 
-use u_monitor_core::{PlatformResult, ProcessId, RegisterSnapshot, ThreadId};
+fn measured<T>(value: T) -> PlatformResult<T> {
+    PlatformResult::Success(Measurement {
+        value,
+        source: DataSource::Measured,
+        timestamp: SystemTime::now().into(),
+    })
+}
+
+fn adapt(snapshot: u_library_registers::RegisterSnapshot) -> RegisterSnapshot {
+    RegisterSnapshot {
+        architecture: match snapshot.architecture {
+            u_library_registers::RegisterArchitecture::X86_64 => RegisterArchitecture::X86_64,
+            u_library_registers::RegisterArchitecture::AArch64 => RegisterArchitecture::AArch64,
+        },
+        thread_id: measured(snapshot.thread_id),
+        registers: snapshot
+            .registers
+            .into_iter()
+            .map(|reg| RegisterValue::new(reg.name, reg.bits, reg.width_bits))
+            .collect(),
+    }
+}
+
+fn map_error(error: RegisterError) -> PlatformResult<RegisterSnapshot> {
+    match error {
+        RegisterError::Unsupported(message) => PlatformResult::NotImplemented(message),
+        RegisterError::PermissionRequired(message) => PlatformResult::PermissionRequired(message),
+        RegisterError::Unavailable(message) => PlatformResult::Unavailable(message),
+    }
+}
 
 pub(crate) fn capture_current_thread() -> PlatformResult<RegisterSnapshot> {
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    {
-        windows_x64::capture()
-    }
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
-    {
-        PlatformResult::NotImplemented(
-            "Current-thread register capture is implemented for Windows x86-64 in this version"
-                .into(),
-        )
+    match u_library_registers::capture_current_thread() {
+        Ok(snapshot) => measured(adapt(snapshot)),
+        Err(error) => map_error(error),
     }
 }
 
@@ -28,19 +50,8 @@ pub(crate) fn capture_thread(
     process_id: ProcessId,
     thread_id: ThreadId,
 ) -> PlatformResult<RegisterSnapshot> {
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    {
-        windows_x64_thread::capture(process_id, thread_id)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        linux::capture_thread(process_id, thread_id)
-    }
-    #[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "linux")))]
-    {
-        let _ = (process_id, thread_id);
-        PlatformResult::NotImplemented(
-            "Other-thread register capture is implemented for Windows x86-64 and Linux".into(),
-        )
+    match u_library_registers::capture_thread(process_id, thread_id) {
+        Ok(snapshot) => measured(adapt(snapshot)),
+        Err(error) => map_error(error),
     }
 }

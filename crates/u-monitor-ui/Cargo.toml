@@ -12,6 +12,8 @@ name = "u-monitor"
 path = "src/main.rs"
 
 [dependencies]
+u-library-core = { path = "../../../U-Library/crates/u-library-core" }
+u-library-gpu = { path = "../../../U-Library/crates/u-library-gpu" }
 u-monitor-core = { path = "../u-monitor-core" }
 u-monitor-platform = { path = "../u-monitor-platform" }
 u-monitor-telemetry = { path = "../u-monitor-telemetry" }

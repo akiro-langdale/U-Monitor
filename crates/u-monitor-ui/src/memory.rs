@@ -1,5 +1,7 @@
 //! Current-process virtual memory map and read-only HEX samples.
+use crate::dashboard::{ascii_dot, hex_rows};
 use eframe::egui;
+use u_library_core::find_byte_offsets;
 use u_monitor_core::{
     DataSource, Measurement, MemoryBytes, MemoryReadRequest, PlatformResult, Timestamp,
     VirtualMemoryRegion,
@@ -61,6 +63,10 @@ pub(crate) struct MemoryPanel {
     baseline: Option<Measurement<MemoryBytes>>,
     diff: Option<Result<HexDiff, String>>,
     filter_readable: bool,
+    address_input: String,
+    search_input: String,
+    length_input: usize,
+    request_error: Option<&'static str>,
 }
 
 impl MemoryPanel {
@@ -72,6 +78,10 @@ impl MemoryPanel {
             baseline: None,
             diff: None,
             filter_readable: true,
+            address_input: String::new(),
+            search_input: String::new(),
+            length_input: MAX_MEMORY_SAMPLE_BYTES,
+            request_error: None,
         }
     }
 
@@ -80,9 +90,38 @@ impl MemoryPanel {
         ui: &mut egui::Ui,
         read_bytes: &dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>,
     ) {
-        ui.label(
-            "Карта относится к адресному пространству текущего процесса U-Monitor. Это не дамп физической RAM и не инспекция чужих процессов.",
-        );
+        let mut reveal_sample = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Адрес");
+            let address = ui.add(
+                egui::TextEdit::singleline(&mut self.address_input)
+                    .hint_text("0x…")
+                    .desired_width(170.0),
+            );
+            ui.label("Байты");
+            ui.add(egui::DragValue::new(&mut self.length_input).range(1..=MAX_MEMORY_SAMPLE_BYTES));
+            if ui.button("Прочитать").clicked()
+                || (address.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)))
+            {
+                match self.requested_range() {
+                    Ok(key) => {
+                        self.read_selection(key, read_bytes);
+                        reveal_sample = true;
+                    }
+                    Err(error) => {
+                        self.request_error = Some(error);
+                        self.selected = None;
+                        self.sample = None;
+                        self.baseline = None;
+                        self.diff = None;
+                    }
+                }
+            }
+        });
+        if let Some(error) = self.request_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.label("Карта виртуальной памяти выбранного процесса.");
         ui.add_space(8.0);
         ui.checkbox(
             &mut self.filter_readable,
@@ -92,11 +131,7 @@ impl MemoryPanel {
         ui.monospace(self.regions.availability().to_string());
         match &self.regions {
             PlatformResult::Success(measurement) => {
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
                 let rows: Vec<(usize, &VirtualMemoryRegion)> = measurement
                     .value
@@ -134,20 +169,26 @@ impl MemoryPanel {
                                         .add_enabled(region.readable, egui::Button::new("HEX"))
                                         .clicked()
                                     {
-                                        let length = (region.size_bytes as usize)
-                                            .clamp(1, MAX_MEMORY_SAMPLE_BYTES);
+                                        let length =
+                                            region.size_bytes.min(MAX_MEMORY_SAMPLE_BYTES as u64)
+                                                as usize;
                                         let key = SampleKey {
                                             region_index: index,
                                             address: region.base_address,
                                             length,
                                         };
                                         self.selected = Some(key);
+                                        self.address_input =
+                                            format!("0x{:016X}", region.base_address);
+                                        self.length_input = length;
+                                        self.request_error = None;
                                         self.baseline = None;
                                         self.diff = None;
                                         self.sample = Some(read_bytes(MemoryReadRequest {
                                             address: region.base_address,
                                             length,
                                         }));
+                                        reveal_sample = true;
                                     }
                                     ui.end_row();
                                 }
@@ -165,7 +206,10 @@ impl MemoryPanel {
         }
 
         ui.add_space(16.0);
-        ui.heading("HEX-просмотр");
+        let heading = ui.heading("HEX-просмотр");
+        if reveal_sample {
+            heading.scroll_to_me(Some(egui::Align::TOP));
+        }
         ui.label(format!(
             "Только чтение, максимум {MAX_MEMORY_SAMPLE_BYTES} байт за запрос."
         ));
@@ -175,7 +219,7 @@ impl MemoryPanel {
                     "Регион #{} · 0x{:016X} · {} байт",
                     key.region_index, key.address, key.length
                 ));
-                show_sample(ui, sample);
+                show_sample(ui, sample, reveal_sample, &mut self.search_input);
                 self.snapshot_controls(ui, read_bytes);
             }
             _ => {
@@ -185,7 +229,7 @@ impl MemoryPanel {
 
         if let Some(diff) = &self.diff {
             ui.add_space(12.0);
-            ui.heading("Сравнение снимков");
+            crate::design::section(ui, "Сравнение снимков");
             match diff {
                 Ok(diff) => show_diff(ui, diff),
                 Err(reason) => {
@@ -195,13 +239,58 @@ impl MemoryPanel {
         }
     }
 
+    fn requested_range(&self) -> Result<SampleKey, &'static str> {
+        let address = crate::simulation::parse_address(&self.address_input)
+            .ok_or("Введите адрес в десятичном виде или с префиксом 0x.")?;
+        let length = self.length_input;
+        if !(1..=MAX_MEMORY_SAMPLE_BYTES).contains(&length) {
+            return Err("Недопустимое число байт для чтения.");
+        }
+        let end = address
+            .checked_add(length as u64)
+            .ok_or("Диапазон выходит за пределы адресного пространства.")?;
+        let PlatformResult::Success(regions) = &self.regions else {
+            return Err("Карта памяти недоступна.");
+        };
+        let region_index = regions
+            .value
+            .iter()
+            .position(|region| {
+                region.readable
+                    && address >= region.base_address
+                    && end <= region.base_address.saturating_add(region.size_bytes)
+            })
+            .ok_or("Диапазон должен целиком находиться в одном читаемом регионе.")?;
+        Ok(SampleKey {
+            region_index,
+            address,
+            length,
+        })
+    }
+
+    fn read_selection(
+        &mut self,
+        key: SampleKey,
+        read_bytes: &dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>,
+    ) {
+        let sample = read_bytes(MemoryReadRequest {
+            address: key.address,
+            length: key.length,
+        });
+        self.selected = Some(key);
+        self.sample = Some(sample);
+        self.request_error = None;
+        self.baseline = None;
+        self.diff = None;
+    }
+
     fn snapshot_controls(
         &mut self,
         ui: &mut egui::Ui,
         read_bytes: &dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>,
     ) {
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let can_pin = matches!(&self.sample, Some(PlatformResult::Success(_)));
             if ui
                 .add_enabled(can_pin, egui::Button::new("Запомнить снимок A"))
@@ -262,30 +351,31 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn show_sample(ui: &mut egui::Ui, sample: &PlatformResult<MemoryBytes>) {
+fn show_sample(
+    ui: &mut egui::Ui,
+    sample: &PlatformResult<MemoryBytes>,
+    reset_scroll: bool,
+    search_input: &mut String,
+) {
     ui.monospace(sample.availability().to_string());
     match sample {
         PlatformResult::Success(measurement) => {
-            ui.monospace(match measurement.source {
-                DataSource::Measured => "MEASURED",
-                DataSource::Calculated => "CALCULATED",
-                DataSource::Simulated => "SIMULATED",
-            });
+            crate::design::source(ui, measurement.source);
             ui.small(format!(
                 "0x{:016X} · {} байт · UTC {}",
                 measurement.value.address,
                 measurement.value.bytes.len(),
                 measurement.timestamp.to_rfc3339()
             ));
-            egui::ScrollArea::vertical()
-                .id_salt("memory_hex")
-                .max_height(240.0)
-                .show(ui, |ui| {
-                    ui.monospace(hex_dump(
-                        measurement.value.address,
-                        &measurement.value.bytes,
-                    ));
-                });
+            show_search(ui, search_input, &measurement.value.bytes);
+            ui.small("Смещение от начала снимка · HEX · ASCII");
+            hex_rows(
+                ui,
+                "memory_hex",
+                None,
+                &measurement.value.bytes,
+                reset_scroll,
+            );
         }
         PlatformResult::PermissionRequired(r)
         | PlatformResult::Unavailable(r)
@@ -298,10 +388,66 @@ fn show_sample(ui: &mut egui::Ui, sample: &PlatformResult<MemoryBytes>) {
     }
 }
 
+fn parse_hex_pattern(input: &str) -> Result<Vec<u8>, &'static str> {
+    let digits: Vec<_> = input
+        .bytes()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .take(2 * MAX_MEMORY_SAMPLE_BYTES + 1)
+        .collect();
+    if digits.len() > 2 * MAX_MEMORY_SAMPLE_BYTES {
+        return Err("Шаблон длиннее максимального снимка (512 байт).");
+    }
+    if !digits.len().is_multiple_of(2) || !digits.iter().all(u8::is_ascii_hexdigit) {
+        return Err("Введите по две HEX-цифры на байт, например 00 FF.");
+    }
+    digits
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).map_err(|_| "Недопустимые HEX-цифры.")?;
+            u8::from_str_radix(pair, 16).map_err(|_| "Недопустимые HEX-цифры.")
+        })
+        .collect()
+}
+
+fn show_search(ui: &mut egui::Ui, input: &mut String, bytes: &[u8]) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Поиск HEX в снимке");
+        ui.add(
+            egui::TextEdit::singleline(input)
+                .hint_text("00 FF")
+                .desired_width(170.0),
+        );
+    });
+    match parse_hex_pattern(input) {
+        Ok(pattern) if pattern.is_empty() => {}
+        Ok(pattern) => {
+            let offsets: Vec<_> = find_byte_offsets(bytes, &pattern).collect();
+            if offsets.is_empty() {
+                ui.small("Совпадений нет.");
+                return;
+            }
+            ui.small(format!("Совпадений: {} · смещения", offsets.len()));
+            egui::ScrollArea::vertical()
+                .id_salt("memory_hex_matches")
+                .max_height(72.0)
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for offset in offsets {
+                            ui.monospace(format!("+{offset:04X}"));
+                        }
+                    });
+                });
+        }
+        Err(message) => {
+            ui.colored_label(ui.visuals().error_fg_color, message);
+        }
+    }
+}
+
 fn show_diff(ui: &mut egui::Ui, diff: &HexDiff) {
-    ui.monospace("CALCULATED");
+    crate::design::source(ui, DataSource::Calculated);
     ui.label(format!(
-        "Изменено {} из {} байт · A UTC {} → B UTC {}",
+        "Изменено {} из {} байт · A UTC {} · B UTC {}",
         diff.changed_offsets.len(),
         diff.before.len(),
         diff.before_at.to_rfc3339(),
@@ -313,6 +459,7 @@ fn show_diff(ui: &mut egui::Ui, diff: &HexDiff) {
     }
     egui::ScrollArea::vertical()
         .id_salt("memory_hex_diff")
+        .min_scrolled_height(160.0)
         .max_height(220.0)
         .show(ui, |ui| {
             egui::Grid::new("memory_diff_grid")
@@ -335,42 +482,8 @@ fn show_diff(ui: &mut egui::Ui, diff: &HexDiff) {
                     }
                 });
             ui.add_space(8.0);
-            ui.small(
-                "Подсветка только изменённых байт. Полный дамп B остаётся в HEX-просмотре выше.",
-            );
+            ui.small("В таблице показаны изменённые байты. Полный дамп B доступен выше.");
         });
-}
-
-fn ascii_dot(byte: u8) -> char {
-    if (0x20..0x7f).contains(&byte) {
-        byte as char
-    } else {
-        '.'
-    }
-}
-
-fn hex_dump(base: u64, bytes: &[u8]) -> String {
-    let mut out = String::new();
-    for (offset, chunk) in bytes.chunks(16).enumerate() {
-        let address = base + (offset as u64 * 16);
-        out.push_str(&format!("{address:016X}  "));
-        for index in 0..16 {
-            if let Some(byte) = chunk.get(index) {
-                out.push_str(&format!("{byte:02X} "));
-            } else {
-                out.push_str("   ");
-            }
-            if index == 7 {
-                out.push(' ');
-            }
-        }
-        out.push(' ');
-        for byte in chunk {
-            out.push(ascii_dot(*byte));
-        }
-        out.push('\n');
-    }
-    out
 }
 
 #[cfg(test)]
@@ -388,11 +501,9 @@ mod tests {
     }
 
     #[test]
-    fn hex_dump_keeps_address_ascii_and_padding() {
-        let text = hex_dump(0x1000, &[0x41, 0x00, 0x7e, 0xff]);
-        assert!(text.contains("0000000000001000"));
-        assert!(text.contains("41 00 7E FF"));
-        assert!(text.contains("A.~."));
+    fn hex_row_keeps_ascii_and_padding() {
+        let text = crate::dashboard::hex_data(&[0x41, 0x00, 0x7e, 0xff]);
+        assert_eq!(text, format!("{:23}  A.~.", "41 00 7E FF"));
     }
 
     #[test]
@@ -432,6 +543,19 @@ mod tests {
             source: DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         }));
+        panel.address_input = "0x2FFE".into();
+        panel.length_input = 2;
+        let request = panel
+            .requested_range()
+            .expect("read ends at region boundary");
+        assert_eq!(
+            (request.region_index, request.address, request.length),
+            (0, 0x2FFE, 2)
+        );
+        panel.length_input = 3;
+        assert!(panel.requested_range().is_err());
+        panel.address_input = u64::MAX.to_string();
+        assert!(panel.requested_range().is_err());
         panel.selected = Some(SampleKey {
             region_index: 0,
             address: 0x2000,
@@ -453,5 +577,19 @@ mod tests {
             });
         });
         assert!(!output.shapes.is_empty());
+    }
+    #[test]
+    fn hex_search_accepts_compact_and_spaced_bytes() {
+        assert_eq!(parse_hex_pattern("00ffA1"), Ok(vec![0, 255, 161]));
+        assert_eq!(parse_hex_pattern("00 ff\tA1"), Ok(vec![0, 255, 161]));
+        assert_eq!(parse_hex_pattern("  "), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn hex_search_rejects_invalid_and_oversized_patterns() {
+        for input in ["f", "0x", "+F", "я"] {
+            assert!(parse_hex_pattern(input).is_err(), "{input}");
+        }
+        assert!(parse_hex_pattern(&"00".repeat(MAX_MEMORY_SAMPLE_BYTES + 1)).is_err());
     }
 }

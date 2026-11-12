@@ -19,6 +19,8 @@ pub use storage::MAX_FILE_SAMPLE_BYTES;
 pub use storage::MINIMUM_DISK_IO_INTERVAL;
 /// Upper bound for one current-process memory sample returned to the inspector.
 pub use virtual_memory::MAX_MEMORY_SAMPLE_BYTES;
+#[cfg(windows)]
+pub use virtual_memory::ProcessMemory;
 
 use std::time::SystemTime;
 use u_monitor_core::{
@@ -192,6 +194,9 @@ impl PlatformAdapter for NativePlatformAdapter {
             PlatformFeature::ForeignThreadRegisters => Availability::Supported,
             #[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "linux")))]
             PlatformFeature::ForeignThreadRegisters => Availability::NotImplemented,
+            #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+            PlatformFeature::ForeignProcessMemory => Availability::Supported,
+            #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
             PlatformFeature::ForeignProcessMemory => Availability::NotImplemented,
             #[cfg(target_os = "linux")]
             PlatformFeature::CacheCounters => Availability::Supported,

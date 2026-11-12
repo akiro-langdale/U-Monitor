@@ -10,7 +10,7 @@ use u_monitor::{
 #[test]
 fn public_abi_smoke_preserves_provenance() {
     let version = unsafe { std::ffi::CStr::from_ptr(um_version()) };
-    assert_eq!(version.to_str().unwrap(), "0.1.0");
+    assert_eq!(version.to_str().unwrap(), env!("CARGO_PKG_VERSION"));
 
     let mut name = [0 as std::os::raw::c_char; 32];
     assert_eq!(

@@ -13,6 +13,9 @@ jobs:
   build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: U-Monitor
     strategy:
       fail-fast: false
       matrix:
@@ -26,12 +29,38 @@ jobs:
             artifact: u-monitor-macos-universal
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: U-Monitor
+          persist-credentials: false
+
+      - name: Validate U-Library source
+        shell: bash
+        env:
+          U_LIBRARY_REPOSITORY: ${{ vars.U_LIBRARY_REPOSITORY }}
+          U_LIBRARY_REVISION: ${{ vars.U_LIBRARY_REVISION }}
+        run: |
+          if [[ ! "$U_LIBRARY_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ||
+                ! "$U_LIBRARY_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Set U_LIBRARY_REPOSITORY (owner/repo) and U_LIBRARY_REVISION (full commit SHA)."
+            exit 1
+          fi
+
+      - name: Check out pinned U-Library
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.U_LIBRARY_REPOSITORY }}
+          ref: ${{ vars.U_LIBRARY_REVISION }}
+          token: ${{ secrets.U_LIBRARY_READ_TOKEN || github.token }}
+          path: U-Library
+          persist-credentials: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.90.0
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: U-Monitor
 
       - name: Linux GUI build deps
         if: runner.os == 'Linux'
@@ -40,7 +69,17 @@ jobs:
           sudo apt-get install -y libclang-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
       - name: Release build
-        run: cargo build --release -p u-monitor-ui -p u-monitor-ffi
+        if: runner.os != 'macOS'
+        run: |
+          cargo build --locked --release -p u-monitor-ui
+          cargo build --locked --release -p u-monitor-ffi
+
+      - name: Build both macOS architectures
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          cargo build --locked --release --target x86_64-apple-darwin -p u-monitor-ui -p u-monitor-ffi
+          cargo build --locked --release --target aarch64-apple-darwin -p u-monitor-ui -p u-monitor-ffi
 
       - name: Package Linux
         if: runner.os == 'Linux'
@@ -67,8 +106,10 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-          cp target/release/u-monitor dist/
-          cp target/release/libu_monitor.dylib dist/
+          for binary in u-monitor libu_monitor.dylib; do
+            lipo -create "target/x86_64-apple-darwin/release/$binary" "target/aarch64-apple-darwin/release/$binary" -output "dist/$binary"
+            lipo -verify_arch x86_64 arm64 "dist/$binary"
+          done
           cp crates/u-monitor-ffi/include/u_monitor.h dist/
           cp LICENSE-MIT LICENSE-APACHE README.md CHANGELOG.md dist/
           tar -C dist -czf "${{ matrix.artifact }}.tar.gz" .
@@ -77,9 +118,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: |
-            *.tar.gz
-            *.zip
+          path: U-Monitor/${{ matrix.artifact }}.*
+          if-no-files-found: error
 
   publish:
     needs: build
