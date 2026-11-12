@@ -103,7 +103,11 @@ fn native_capability_matrix_matches_host_limits() {
 
     assert_eq!(
         adapter.check_availability(PlatformFeature::ForeignProcessMemory),
-        Availability::NotImplemented
+        if cfg!(any(windows, target_os = "linux", target_os = "macos")) {
+            Availability::Supported
+        } else {
+            Availability::NotImplemented
+        }
     );
 
     #[cfg(target_os = "linux")]

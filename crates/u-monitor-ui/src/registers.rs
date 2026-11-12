@@ -1,6 +1,6 @@
 //! Current-thread register snapshot viewer (HEX / DEC / BIN + change highlight).
 use eframe::egui;
-use u_monitor_core::{DataSource, PlatformResult, RegisterSnapshot, RegisterValue};
+use u_monitor_core::{PlatformResult, RegisterSnapshot, RegisterValue};
 
 pub(crate) struct RegistersPanel {
     pub(crate) snapshot: PlatformResult<RegisterSnapshot>,
@@ -51,11 +51,7 @@ impl RegistersPanel {
         ui.monospace(self.snapshot.availability().to_string());
         match &self.snapshot {
             PlatformResult::Success(measurement) => {
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
                 ui.label(format!("Архитектура: {}", measurement.value.architecture));
                 match &measurement.value.thread_id {
@@ -165,12 +161,12 @@ mod tests {
                 architecture: RegisterArchitecture::X86_64,
                 thread_id: PlatformResult::Success(Measurement {
                     value: 42,
-                    source: DataSource::Measured,
+                    source: u_monitor_core::DataSource::Measured,
                     timestamp: UNIX_EPOCH.into(),
                 }),
                 registers: vec![RegisterValue::new("RIP", 0x1000, 64)],
             },
-            source: DataSource::Measured,
+            source: u_monitor_core::DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         }));
         let output = ctx.run(egui::RawInput::default(), |ctx| {

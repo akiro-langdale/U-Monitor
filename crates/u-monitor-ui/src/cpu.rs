@@ -1,7 +1,7 @@
 //! CPU discovery at startup plus live utilization from shared telemetry.
 use crate::live::LiveTelemetry;
 use eframe::egui;
-use u_monitor_core::{CpuInfo, DataSource, PlatformResult};
+use u_monitor_core::{CpuInfo, PlatformResult};
 
 pub(crate) mod history;
 
@@ -57,7 +57,7 @@ pub(crate) fn show(
     ui.label("Физическое ядро — вычислительное ядро CPU. Логический процессор — аппаратный поток, доступный планировщику ОС. Их количество может различаться.");
     ui.label("Виртуальная машина или контейнер могут ограничивать видимую топологию. Данные относятся к представлению ОС на момент запуска.");
     ui.add_space(16.0);
-    ui.heading("Живая нагрузка");
+    crate::design::section(ui, "Живая нагрузка");
     ui.label(egui::RichText::new("Источник: фоновый TelemetryWorker · MEASURED").weak());
     ui.label("Клик по строке логического CPU выбирает его для Cache/Simulation.");
     ui.add_space(8.0);
@@ -76,11 +76,7 @@ fn field<T>(
         match result {
             PlatformResult::Success(measurement) => {
                 value(ui, &measurement.value);
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
             }
             PlatformResult::PermissionRequired(reason)
@@ -104,7 +100,7 @@ mod tests {
     fn measured<T>(value: T) -> PlatformResult<T> {
         PlatformResult::Success(Measurement {
             value,
-            source: DataSource::Measured,
+            source: u_monitor_core::DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         })
     }

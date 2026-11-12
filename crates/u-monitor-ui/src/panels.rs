@@ -1,15 +1,14 @@
-use crate::app::Page;
 use eframe::egui;
-use u_monitor_core::{Availability, DataSource, PlatformFeature, PlatformResult, SystemIdentity};
+use u_monitor_core::{Availability, PlatformFeature, PlatformResult, SystemIdentity};
 
 pub(crate) fn overview(
     ui: &mut egui::Ui,
     identity: &PlatformResult<SystemIdentity>,
     capabilities: &[(PlatformFeature, Availability)],
 ) {
-    egui::Frame::group(ui.style()).show(ui, |ui| {
+    crate::design::surface(ui).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        ui.heading("Среда выполнения");
+        crate::design::section(ui, "Среда выполнения");
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             ui.label("Получение сведений:");
@@ -25,11 +24,7 @@ pub(crate) fn overview(
                     ui.label(measurement.value.process_architecture.to_string());
                     ui.end_row();
                     ui.label("Источник");
-                    ui.monospace(match measurement.source {
-                        DataSource::Measured => "MEASURED",
-                        DataSource::Calculated => "CALCULATED",
-                        DataSource::Simulated => "SIMULATED",
-                    });
+                    crate::design::source(ui, measurement.source);
                     ui.end_row();
                     ui.label("Время получения (UTC)");
                     ui.label(measurement.timestamp.to_rfc3339());
@@ -45,7 +40,7 @@ pub(crate) fn overview(
         }
     });
     ui.add_space(24.0);
-    ui.heading("Возможности платформы");
+    crate::design::section(ui, "Возможности платформы");
     ui.label(
         "Статусы относятся к NativePlatformAdapter на текущем OS/arch. NOT_IMPLEMENTED — нет backend, а не ошибка измерения.",
     );
@@ -63,58 +58,4 @@ pub(crate) fn overview(
                 ui.end_row();
             }
         });
-    ui.add_space(24.0);
-    ui.heading("Разделы приложения");
-    ui.label("Статусы ниже относятся к подключению панелей GUI.");
-    ui.add_space(12.0);
-    for page in Page::ALL.into_iter().filter(|page| *page != Page::Overview) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.strong(page.title());
-                ui.monospace(
-                    if matches!(
-                        page,
-                        Page::Ram
-                            | Page::Cpu
-                            | Page::Storage
-                            | Page::Memory
-                            | Page::Registers
-                            | Page::Cache
-                            | Page::Simulation
-                            | Page::Processes
-                    ) {
-                        "ПАНЕЛЬ ПОДКЛЮЧЕНА"
-                    } else {
-                        "NOT_IMPLEMENTED"
-                    },
-                );
-            });
-            ui.label(match page {
-                Page::Processes => {
-                    "MEASURED список процессов/потоков и выбор цели для Memory/Registers."
-                }
-                Page::Cpu => "Топология CPU при запуске и живая нагрузка логических процессоров.",
-                Page::Storage => {
-                    "Смонтированные тома, файловые системы и доступное пространство по данным ОС."
-                }
-                Page::Ram => {
-                    "Реальные снимки RAM, управление интервалом и график истории использования."
-                }
-                Page::Memory => {
-                    "Виртуальные регионы текущего процесса и read-only HEX до 512 байт."
-                }
-                Page::Registers => {
-                    "Снимок GPR текущего потока UI: HEX/DEC/BIN и Δ к предыдущему снимку."
-                }
-                Page::Cache => {
-                    "Иерархия кэшей CPU: уровень, тип, размер, линия, ассоциативность и sharing."
-                }
-                Page::Simulation => {
-                    "Учебная модель L1→L2→RAM: hit/miss, eviction и latency только как SIMULATED."
-                }
-                Page::Overview => page.pending(),
-            });
-        });
-        ui.add_space(6.0);
-    }
 }

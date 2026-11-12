@@ -9,12 +9,39 @@ jobs:
   check:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: U-Monitor
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: U-Monitor
+          persist-credentials: false
+
+      - name: Validate U-Library source
+        shell: bash
+        env:
+          U_LIBRARY_REPOSITORY: ${{ vars.U_LIBRARY_REPOSITORY }}
+          U_LIBRARY_REVISION: ${{ vars.U_LIBRARY_REVISION }}
+        run: |
+          if [[ ! "$U_LIBRARY_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ||
+                ! "$U_LIBRARY_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Set U_LIBRARY_REPOSITORY (owner/repo) and U_LIBRARY_REVISION (full commit SHA)."
+            exit 1
+          fi
+
+      - name: Check out pinned U-Library
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.U_LIBRARY_REPOSITORY }}
+          ref: ${{ vars.U_LIBRARY_REVISION }}
+          token: ${{ secrets.U_LIBRARY_READ_TOKEN || github.token }}
+          path: U-Library
+          persist-credentials: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.90.0
@@ -23,6 +50,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: U-Monitor
 
       - name: Linux GUI build deps
         if: runner.os == 'Linux'
@@ -34,10 +63,12 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Release smoke build
-        run: cargo build --release -p u-monitor-ui -p u-monitor-ffi
+        run: |
+          cargo build --locked --release -p u-monitor-ui
+          cargo build --locked --release -p u-monitor-ffi

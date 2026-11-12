@@ -64,7 +64,7 @@ impl SimulationPanel {
             "Эта панель запускает учебную модель L1→L2→RAM (set-associative LRU) и отдельную SIMULATED модель latency диска. Значения не смешиваются с MEASURED данными ОС.",
         );
         ui.add_space(8.0);
-        ui.monospace("SIMULATED");
+        crate::design::source(ui, u_monitor_core::DataSource::Simulated);
         ui.small(if self.seed.seeded_from_measured {
             "Конфиг иерархии частично seeded из MEASURED CacheTopology (размеры/ways/line)."
         } else {
@@ -180,7 +180,7 @@ impl SimulationPanel {
                 .and_then(|playback| playback.result.steps.get(index).copied())
         });
         let pulse = ((ui.input(|i| i.time) * 6.0).sin() * 0.5 + 0.5) as f32;
-        ui.heading("Путь доступа");
+        crate::design::section(ui, "Путь доступа");
         ui.horizontal(|ui| {
             level_box(ui, "CPU", false, None, pulse);
             ui.label("→");
@@ -241,7 +241,7 @@ impl SimulationPanel {
     }
 
     fn show_stats(&self, ui: &mut egui::Ui) {
-        ui.heading("Счётчики модели");
+        crate::design::section(ui, "Счётчики модели");
         egui::Grid::new("sim_stats")
             .spacing([20.0, 4.0])
             .show(ui, |ui| {
@@ -267,7 +267,7 @@ impl SimulationPanel {
     }
 
     fn show_trace(&self, ui: &mut egui::Ui) {
-        ui.heading("Трассировка");
+        crate::design::section(ui, "Трассировка");
         let Some(playback) = &self.playback else {
             ui.label("Нажмите «Демо-доступ» или «Доступ», чтобы увидеть шаги модели.");
             return;
@@ -294,7 +294,7 @@ impl SimulationPanel {
     }
 
     fn show_disk(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Диск (отдельная SIMULATED модель)");
+        crate::design::section(ui, "Диск (отдельная SIMULATED модель)");
         ui.label(
             "Не смешивается с RAM/cache stats и не использует MEASURED Disk I/O. Только учебная latency оценка.",
         );
@@ -308,7 +308,7 @@ impl SimulationPanel {
             }
         });
         if let Some(result) = &self.last_disk {
-            ui.monospace("SIMULATED");
+            crate::design::source(ui, u_monitor_core::DataSource::Simulated);
             ui.label(format!(
                 "{} B → {} ns (base {} + transfer {})",
                 result.size_bytes,
@@ -359,7 +359,7 @@ fn level_box(ui: &mut egui::Ui, label: &str, active: bool, event: Option<AccessE
         });
 }
 
-fn parse_address(text: &str) -> Option<u64> {
+pub(crate) fn parse_address(text: &str) -> Option<u64> {
     let text = text.trim();
     if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
         u64::from_str_radix(hex, 16).ok()

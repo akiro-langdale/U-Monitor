@@ -4,6 +4,7 @@ pub(crate) mod history;
 use crate::live::LiveTelemetry;
 use eframe::egui;
 use std::path::PathBuf;
+use u_library_core::DEFAULT_SECTOR_SIZE;
 use u_monitor_core::{DataSource, FileBytes, FileReadRequest, PlatformResult, StorageVolume};
 use u_monitor_platform::MAX_FILE_SAMPLE_BYTES;
 
@@ -11,6 +12,8 @@ pub(crate) struct StoragePanel {
     path: String,
     offset: u64,
     length: usize,
+    sector_index: u64,
+    sector_size: u32,
     sample: Option<PlatformResult<FileBytes>>,
 }
 
@@ -20,6 +23,8 @@ impl Default for StoragePanel {
             path: String::new(),
             offset: 0,
             length: MAX_FILE_SAMPLE_BYTES,
+            sector_index: 0,
+            sector_size: DEFAULT_SECTOR_SIZE,
             sample: None,
         }
     }
@@ -35,7 +40,7 @@ impl StoragePanel {
     ) {
         show_volumes(ui, volumes);
         ui.add_space(16.0);
-        ui.heading("Живой Disk I/O");
+        crate::design::section(ui, "Живой Disk I/O");
         live.show_disk_live(ui);
         ui.add_space(16.0);
         self.show_file_hex(ui, read_file);
@@ -46,7 +51,7 @@ impl StoragePanel {
         ui: &mut egui::Ui,
         read_file: &dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>,
     ) {
-        ui.heading("HEX файла (только чтение)");
+        crate::design::section(ui, "HEX файла (только чтение)");
         ui.label(format!(
             "Пользовательский путь к обычному файлу. Сырые устройства не открываются на запись. Максимум {MAX_FILE_SAMPLE_BYTES} байт."
         ));
@@ -76,6 +81,29 @@ impl StoragePanel {
                 }));
             }
         });
+        ui.horizontal(|ui| {
+            ui.label("Сектор");
+            ui.add(egui::DragValue::new(&mut self.sector_index).speed(1));
+            ui.label("Размер сектора");
+            ui.add(
+                egui::DragValue::new(&mut self.sector_size)
+                    .range(1..=MAX_FILE_SAMPLE_BYTES as u32)
+                    .speed(1),
+            );
+            if ui.button("Прочитать сектор").clicked() {
+                let path = PathBuf::from(self.path.trim());
+                let sector_size = self.sector_size.max(1);
+                let length = (sector_size as usize).min(MAX_FILE_SAMPLE_BYTES);
+                let offset = self.sector_index.saturating_mul(u64::from(sector_size));
+                self.offset = offset;
+                self.length = length;
+                self.sample = Some(read_file(FileReadRequest {
+                    path,
+                    offset,
+                    length,
+                }));
+            }
+        });
         if let Some(sample) = &self.sample {
             ui.monospace(sample.availability().to_string());
             match sample {
@@ -88,7 +116,13 @@ impl StoragePanel {
                         measurement.value.offset,
                         measurement.value.bytes.len()
                     ));
-                    ui.monospace(hex_dump(measurement.value.offset, &measurement.value.bytes));
+                    crate::dashboard::hex_rows(
+                        ui,
+                        "file_hex",
+                        Some(measurement.value.offset),
+                        &measurement.value.bytes,
+                        false,
+                    );
                 }
                 PlatformResult::PermissionRequired(r)
                 | PlatformResult::Unavailable(r)
@@ -101,37 +135,6 @@ impl StoragePanel {
             }
         }
     }
-}
-
-fn hex_dump(base: u64, bytes: &[u8]) -> String {
-    let mut out = String::new();
-    for (row, chunk) in bytes.chunks(16).enumerate() {
-        let address = base.saturating_add((row * 16) as u64);
-        out.push_str(&format!("{address:016x}  "));
-        for (index, byte) in chunk.iter().enumerate() {
-            out.push_str(&format!("{byte:02x} "));
-            if index == 7 {
-                out.push(' ');
-            }
-        }
-        for index in chunk.len()..16 {
-            out.push_str("   ");
-            if index == 7 {
-                out.push(' ');
-            }
-        }
-        out.push(' ');
-        for byte in chunk {
-            let ch = if byte.is_ascii_graphic() || *byte == b' ' {
-                *byte as char
-            } else {
-                '.'
-            };
-            out.push(ch);
-        }
-        out.push('\n');
-    }
-    out
 }
 
 fn show_volumes(ui: &mut egui::Ui, result: &PlatformResult<Vec<StorageVolume>>) {

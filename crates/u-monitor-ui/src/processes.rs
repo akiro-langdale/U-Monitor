@@ -1,6 +1,6 @@
 //! Process/thread enumeration and inspection-target selection.
 use eframe::egui;
-use u_monitor_core::{DataSource, InspectionTarget, PlatformResult, ProcessInfo, ThreadInfo};
+use u_monitor_core::{InspectionTarget, PlatformResult, ProcessInfo, ThreadInfo};
 
 pub(crate) struct ProcessesPanel {
     processes: PlatformResult<Vec<ProcessInfo>>,
@@ -35,7 +35,7 @@ impl ProcessesPanel {
         list_threads: &dyn Fn(u64) -> PlatformResult<Vec<ThreadInfo>>,
     ) {
         ui.label(
-            "Список процессов MEASURED. Выбор чужого процесса пока не открывает его память/регистры: для них остаётся NOT_IMPLEMENTED до debug-API (этап Registers).",
+            "Выберите процесс, затем откройте раздел «Память» для просмотра доступных регионов.",
         );
         ui.add_space(8.0);
         ui.horizontal(|ui| {
@@ -63,11 +63,7 @@ impl ProcessesPanel {
         ui.add_space(12.0);
         match &self.processes {
             PlatformResult::Success(measurement) => {
-                ui.monospace(match measurement.source {
-                    DataSource::Measured => "MEASURED",
-                    DataSource::Calculated => "CALCULATED",
-                    DataSource::Simulated => "SIMULATED",
-                });
+                crate::design::source(ui, measurement.source);
                 let filter = self.filter.to_ascii_lowercase();
                 egui::ScrollArea::vertical()
                     .id_salt("process_list")
@@ -121,7 +117,7 @@ impl ProcessesPanel {
         }
 
         ui.add_space(12.0);
-        ui.heading("Потоки");
+        crate::design::section(ui, "Потоки");
         match &self.threads {
             PlatformResult::Success(measurement) => {
                 egui::ScrollArea::vertical()
@@ -195,7 +191,7 @@ mod tests {
                     path: None,
                     is_current: true,
                 }],
-                source: DataSource::Measured,
+                source: u_monitor_core::DataSource::Measured,
                 timestamp: std::time::UNIX_EPOCH.into(),
             }),
             InspectionTarget::current_process(1, "init"),

@@ -1,11 +1,12 @@
-use std::{fs, io::Write, time::Duration};
+#[cfg(any(windows, target_os = "linux"))]
+use std::time::Duration;
+use std::{fs, io::Write};
 use u_monitor_core::{
     Availability, FileReadRequest, PlatformAdapter, PlatformFeature, PlatformResult,
 };
-use u_monitor_platform::{
-    MAX_FILE_SAMPLE_BYTES, MINIMUM_DISK_IO_INTERVAL, NativePlatformAdapter, NativeTelemetryAdapter,
-    StubPlatformAdapter,
-};
+use u_monitor_platform::{MAX_FILE_SAMPLE_BYTES, NativePlatformAdapter, StubPlatformAdapter};
+#[cfg(any(windows, target_os = "linux"))]
+use u_monitor_platform::{MINIMUM_DISK_IO_INTERVAL, NativeTelemetryAdapter};
 
 #[test]
 fn stub_does_not_invent_disk_io_or_file_bytes() {
@@ -42,13 +43,23 @@ fn native_file_hex_reads_regular_file_and_rejects_missing() {
 
     let PlatformResult::Success(sample) = adapter.read_file_bytes(FileReadRequest {
         path: path.clone(),
-        offset: 0,
+        offset: 7,
         length: MAX_FILE_SAMPLE_BYTES,
     }) else {
         panic!("expected measured file bytes");
     };
     assert_eq!(sample.source, u_monitor_core::DataSource::Measured);
-    assert!(sample.value.bytes.starts_with(b"Hello"));
+    assert_eq!(sample.value.offset, 7);
+    assert_eq!(sample.value.bytes, b"U-Monitor HEX\n");
+
+    let PlatformResult::Success(eof) = adapter.read_file_bytes(FileReadRequest {
+        path,
+        offset: 4096,
+        length: 8,
+    }) else {
+        panic!("expected an empty sample past EOF");
+    };
+    assert!(eof.value.bytes.is_empty());
 
     assert!(matches!(
         adapter.read_file_bytes(FileReadRequest {

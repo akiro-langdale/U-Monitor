@@ -1,7 +1,10 @@
 mod app;
 mod cache;
 mod cpu;
+mod dashboard;
+mod design;
 mod explorer;
+mod gpu;
 mod live;
 mod memory;
 mod observability;

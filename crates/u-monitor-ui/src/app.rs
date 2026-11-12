@@ -6,6 +6,62 @@ use crate::{
 
 const THEME_KEY: &str = "u-monitor.ui.theme";
 
+#[cfg(windows)]
+struct ForeignMemory {
+    pid: u64,
+    opened: Result<(ProcessMemory, MemoryPanel), String>,
+}
+
+#[cfg(windows)]
+fn show_foreign_memory(ui: &mut egui::Ui, pid: u64, memory: &mut Option<ForeignMemory>) {
+    if let Some(ForeignMemory {
+        opened: Ok((session, panel)),
+        ..
+    }) = memory
+    {
+        if ui.button("Обновить карту памяти").clicked() {
+            *panel = MemoryPanel::new(session.regions());
+        }
+        panel.show(ui, &|request| session.read(request));
+        return;
+    }
+    if ui.button("Открыть карту памяти").clicked() {
+        let opened = match ProcessMemory::open(pid) {
+            PlatformResult::Success(session) => {
+                let session = session.value;
+                let panel = MemoryPanel::new(session.regions());
+                Ok((session, panel))
+            }
+            PlatformResult::PermissionRequired(reason) => Err(format!("Доступ запрещён. {reason}")),
+            PlatformResult::Unavailable(reason) | PlatformResult::NotImplemented(reason) => {
+                Err(reason)
+            }
+            PlatformResult::Error(error) => Err(error.to_string()),
+        };
+        *memory = Some(ForeignMemory { pid, opened });
+        ui.ctx().request_repaint();
+    }
+    if let Some(ForeignMemory {
+        opened: Err(reason),
+        ..
+    }) = memory
+    {
+        ui.colored_label(ui.visuals().error_fg_color, reason);
+    }
+}
+
+fn configure_style(ctx: &egui::Context) {
+    for (theme, dark) in [(egui::Theme::Dark, true), (egui::Theme::Light, false)] {
+        ctx.set_visuals_of(theme, crate::design::visuals(dark));
+        ctx.style_mut_of(theme, |style| {
+            style.spacing.item_spacing = egui::vec2(10.0, 7.0);
+            style.spacing.button_padding = egui::vec2(10.0, 5.0);
+            style.spacing.interact_size.y = 26.0;
+            style.spacing.indent = 18.0;
+        });
+    }
+}
+
 fn restored_dark(storage: Option<&dyn eframe::Storage>) -> bool {
     // Missing or unrecognized settings use the application's default theme.
     !matches!(
@@ -21,6 +77,8 @@ use u_monitor_core::{
     InspectionTarget, MemoryBytes, MemoryReadRequest, PlatformFeature, PlatformResult, ProcessInfo,
     RegisterSnapshot, StorageVolume, SystemIdentity, ThreadInfo, VirtualMemoryRegion,
 };
+#[cfg(windows)]
+use u_monitor_platform::ProcessMemory;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Page {
@@ -32,11 +90,12 @@ pub(crate) enum Page {
     Storage,
     Registers,
     Cache,
+    Gpu,
     Simulation,
 }
 
 impl Page {
-    pub(crate) const ALL: [Self; 9] = [
+    pub(crate) const ALL: [Self; 10] = [
         Self::Overview,
         Self::Processes,
         Self::Cpu,
@@ -45,6 +104,7 @@ impl Page {
         Self::Storage,
         Self::Registers,
         Self::Cache,
+        Self::Gpu,
         Self::Simulation,
     ];
     pub(crate) fn title(self) -> &'static str {
@@ -57,6 +117,7 @@ impl Page {
             Self::Storage => "Накопители",
             Self::Registers => "Регистры",
             Self::Cache => "Кэш",
+            Self::Gpu => "GPU",
             Self::Simulation => "Симуляция",
         }
     }
@@ -70,32 +131,8 @@ impl Page {
             Self::Storage => "Тома, живой Disk I/O и HEX файла",
             Self::Registers => "Регистры выбранного потока",
             Self::Cache => "Характеристики и иерархия кэшей",
+            Self::Gpu => "Адаптеры и заявленная VRAM через U-Library",
             Self::Simulation => "Отдельные модели иерархии памяти",
-        }
-    }
-    pub(crate) fn pending(self) -> &'static str {
-        match self {
-            Self::Overview => "",
-            Self::Processes => {
-                "Панель процессов подключена: MEASURED enumeration и выбор цели инспекции."
-            }
-            Self::Cpu => "Панель CPU подключена: топология при запуске и живая нагрузка.",
-            Self::Ram => "Панель RAM подключена: снимки, интервал и история использования.",
-            Self::Memory => {
-                "Панель памяти подключена: карта виртуальных регионов текущего процесса."
-            }
-            Self::Storage => {
-                "Панель накопителей подключена: тома, живой Disk I/O и read-only HEX файла."
-            }
-            Self::Registers => {
-                "Панель регистров подключена: снимок текущего потока (другие потоки — отдельно)."
-            }
-            Self::Cache => {
-                "Панель кэша подключена: иерархия L1/L2/L3 и sharing (без содержимого линий)."
-            }
-            Self::Simulation => {
-                "Панель симуляции подключена: учебная модель L1/L2/RAM с пометкой SIMULATED."
-            }
         }
     }
 }
@@ -111,9 +148,12 @@ pub(crate) struct MonitorApp {
     live: LiveTelemetry,
     processes: ProcessesPanel,
     memory: MemoryPanel,
+    #[cfg(windows)]
+    foreign_memory: Option<ForeignMemory>,
     registers: RegistersPanel,
     cache: PlatformResult<CacheTopology>,
     cache_counters: PlatformResult<CacheCounters>,
+    gpu: crate::gpu::GpuPanel,
     simulation: SimulationPanel,
     read_memory: Box<dyn Fn(MemoryReadRequest) -> PlatformResult<MemoryBytes>>,
     refresh_registers: Box<dyn Fn() -> PlatformResult<RegisterSnapshot>>,
@@ -149,6 +189,7 @@ impl MonitorApp {
         read_file: Box<dyn Fn(FileReadRequest) -> PlatformResult<FileBytes>>,
     ) -> Self {
         let dark = restored_dark(cc.storage);
+        configure_style(&cc.egui_ctx);
         cc.egui_ctx.set_theme(if dark {
             egui::Theme::Dark
         } else {
@@ -165,10 +206,13 @@ impl MonitorApp {
             live,
             processes: ProcessesPanel::new(processes, target),
             memory: MemoryPanel::new(regions),
+            #[cfg(windows)]
+            foreign_memory: None,
             registers: RegistersPanel::new(registers),
             simulation: SimulationPanel::new(&cache),
             cache,
             cache_counters,
+            gpu: crate::gpu::GpuPanel::load(),
             read_memory,
             refresh_registers,
             thread_registers,
@@ -184,57 +228,122 @@ impl MonitorApp {
     // Memory HEX reads run only on explicit user button clicks.
     fn render(&mut self, ctx: &egui::Context) {
         self.live.poll(ctx);
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.heading("U-Monitor");
-                ui.label(
-                    egui::RichText::new(env!("CARGO_PKG_VERSION"))
-                        .monospace()
-                        .weak(),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let before = self.dark;
-                    ui.selectable_value(&mut self.dark, false, "Светлая");
-                    ui.selectable_value(&mut self.dark, true, "Тёмная");
-                    ui.label("Тема:");
-                    if before != self.dark {
-                        ctx.set_theme(if self.dark {
-                            egui::Theme::Dark
+        #[cfg(windows)]
+        if self.foreign_memory.as_ref().is_some_and(|memory| {
+            self.processes.target().is_current_process()
+                || memory.pid != self.processes.target().process.pid
+        }) {
+            self.foreign_memory = None;
+        }
+        egui::TopBottomPanel::top("header")
+            .frame(
+                egui::Frame::new()
+                    .fill(ctx.style().visuals.window_fill)
+                    .inner_margin(egui::Margin::symmetric(18, 10)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("U-Monitor")
+                            .size(21.0)
+                            .strong()
+                            .color(ui.visuals().hyperlink_color),
+                    );
+                    ui.weak(env!("CARGO_PKG_VERSION"));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let next = if self.dark {
+                            "Светлая тема"
                         } else {
-                            egui::Theme::Light
-                        });
+                            "Тёмная тема"
+                        };
+                        if ui.button(next).clicked() {
+                            self.dark = !self.dark;
+                            ctx.set_theme(if self.dark {
+                                egui::Theme::Dark
+                            } else {
+                                egui::Theme::Light
+                            });
+                        }
+                    });
+                });
+            });
+        egui::SidePanel::left("navigation")
+            .exact_width(if ctx.content_rect().width() < 850.0 {
+                128.0
+            } else {
+                170.0
+            })
+            .resizable(false)
+            .frame(
+                egui::Frame::new()
+                    .fill(ctx.style().visuals.window_fill)
+                    .inner_margin(10),
+            )
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (label, pages) in [
+                        ("СИСТЕМА", &Page::ALL[..4]),
+                        ("ИНСПЕКЦИЯ", &Page::ALL[4..9]),
+                        ("МОДЕЛИ", &Page::ALL[9..]),
+                    ] {
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(label).size(10.0).weak().strong());
+                        for &page in pages {
+                            let selected = self.page == page;
+                            let response = ui.add_sized(
+                                [ui.available_width(), 27.0],
+                                egui::Button::new(page.title()).selected(selected),
+                            );
+                            if response.clicked() {
+                                self.page = page;
+                            }
+                        }
                     }
                 });
             });
-            ui.add_space(8.0);
-        });
-        egui::SidePanel::left("navigation")
-            .default_width(180.0)
-            .min_width(150.0)
+        let page = self.page;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(ctx.style().visuals.panel_fill).inner_margin(18))
             .show(ctx, |ui| {
-                ui.add_space(16.0);
-                ui.label(egui::RichText::new("ИССЛЕДОВАНИЕ СИСТЕМЫ").small().weak());
-                ui.add_space(12.0);
-                for page in Page::ALL {
-                    ui.add_space(4.0);
-                    ui.selectable_value(&mut self.page, page, page.title());
+            egui::ScrollArea::vertical().id_salt(page.title()).auto_shrink(false).show(ui, |ui| {
+                ui.label(egui::RichText::new(page.title()).size(32.0).strong());
+                ui.weak(page.description());
+                if matches!(page, Page::Memory | Page::Registers) {
+                    let target = self.processes.target();
+                    ui.horizontal_wrapped(|ui| {
+                        ui.weak("Цель");
+                        ui.monospace(format!("{} · PID {}", target.process.name, target.process.pid));
+                        if let Some(thread) = &target.thread {
+                            ui.monospace(format!("TID {}", thread.tid));
+                        }
+                        if ui.link("Выбрать процесс").clicked() {
+                            self.page = Page::Processes;
+                        }
+                    });
                 }
-                ui.add_space(24.0);
-                ui.separator();
-                ui.label(egui::RichText::new("Processes → Quality").small().weak());
-            });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_space(16.0);
-                ui.heading(self.page.title());
-                ui.label(egui::RichText::new(self.page.description()).weak());
-                ui.add_space(20.0);
-                match self.page {
+                ui.add_space(12.0);
+                let frame = if page == Page::Overview {
+                    egui::Frame::new()
+                } else {
+                    crate::design::surface(ui)
+                };
+                frame.show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                match page {
                     Page::Overview => {
+                        if let Some(next) = crate::dashboard::show(
+                            ui,
+                            &self.live,
+                            &self.cache,
+                            &self.storage,
+                            &self.registers.snapshot,
+                        ) {
+                            self.page = next;
+                        }
+                        ui.add_space(16.0);
                         panels::overview(ui, &self.identity, &self.capabilities);
                         ui.add_space(16.0);
-                        ui.heading("Экспорт provenance");
+                        crate::design::section(ui, "Экспорт диагностики");
                         ui.label(
                             "JSON со статусами панелей и текущим cross-panel selection (без содержимого памяти).",
                         );
@@ -298,10 +407,14 @@ impl MonitorApp {
                             let read_memory = self.read_memory.as_ref();
                             self.memory.show(ui, read_memory);
                         } else {
-                            ui.monospace("NOT_IMPLEMENTED");
-                            ui.label(
-                                "Чтение памяти чужого процесса ещё не подключено. Debug/open-process API появится позже; SIMULATED данные сюда не подставляются.",
+                            #[cfg(windows)]
+                            show_foreign_memory(
+                                ui,
+                                self.processes.target().process.pid,
+                                &mut self.foreign_memory,
                             );
+                            #[cfg(not(windows))]
+                            ui.label("Чтение памяти выбранного процесса доступно на Windows.");
                         }
                     }
                     Page::Registers => {
@@ -341,8 +454,10 @@ impl MonitorApp {
                             self.page = Page::Simulation;
                         }
                     }
+                    Page::Gpu => self.gpu.show(ui),
                     Page::Simulation => self.simulation.show(ui),
                 }
+                });
             });
         });
     }
@@ -387,9 +502,12 @@ mod tests {
                 InspectionTarget::current_process(0, "u-monitor"),
             ),
             memory: MemoryPanel::new(PlatformResult::NotImplemented("test fixture".into())),
+            #[cfg(windows)]
+            foreign_memory: None,
             registers: RegistersPanel::new(PlatformResult::NotImplemented("test fixture".into())),
             cache: PlatformResult::NotImplemented("test fixture".into()),
             cache_counters: PlatformResult::NotImplemented("test fixture".into()),
+            gpu: crate::gpu::GpuPanel::load(),
             simulation: SimulationPanel::new(&PlatformResult::NotImplemented(
                 "test fixture".into(),
             )),
@@ -428,14 +546,24 @@ mod tests {
             for page in Page::ALL {
                 for dark in [false, true] {
                     let ctx = egui::Context::default();
+                    configure_style(&ctx);
                     ctx.set_theme(if dark {
                         egui::Theme::Dark
                     } else {
                         egui::Theme::Light
                     });
                     let mut app = fixture_app(page, dark, identity.clone());
-                    let output = ctx.run(egui::RawInput::default(), |ctx| app.render(ctx));
-                    assert!(!output.shapes.is_empty());
+                    for size in [[1040.0, 700.0], [720.0, 480.0]] {
+                        let input = egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                size.into(),
+                            )),
+                            ..Default::default()
+                        };
+                        let output = ctx.run(input, |ctx| app.render(ctx));
+                        assert!(!output.shapes.is_empty(), "{page:?} at {size:?}");
+                    }
                 }
             }
         }

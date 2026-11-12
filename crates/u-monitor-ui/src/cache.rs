@@ -1,6 +1,6 @@
 //! Cache hierarchy metadata panel. Never displays reconstructed cache-line bytes.
 use eframe::egui;
-use u_monitor_core::{CacheCounters, CacheTopology, DataSource, PlatformResult};
+use u_monitor_core::{CacheCounters, CacheTopology, PlatformResult};
 
 pub(crate) fn show(
     ui: &mut egui::Ui,
@@ -22,11 +22,7 @@ pub(crate) fn show(
     ui.monospace(topology.availability().to_string());
     match topology {
         PlatformResult::Success(measurement) => {
-            ui.monospace(match measurement.source {
-                DataSource::Measured => "MEASURED",
-                DataSource::Calculated => "CALCULATED",
-                DataSource::Simulated => "SIMULATED",
-            });
+            crate::design::source(ui, measurement.source);
             ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
             ui.label(format!("Узлов: {}", measurement.value.nodes.len()));
             egui::ScrollArea::both()
@@ -91,7 +87,7 @@ pub(crate) fn show(
     }
 
     ui.add_space(16.0);
-    ui.heading("Счётчики кэша (hardware)");
+    crate::design::section(ui, "Счётчики кэша (hardware)");
     ui.label(
         "Короткое окно PMC/perf для references/misses текущего процесса. SIMULATED значения не подставляются.",
     );
@@ -102,11 +98,7 @@ pub(crate) fn show(
     ui.monospace(counters.availability().to_string());
     match counters {
         PlatformResult::Success(measurement) => {
-            ui.monospace(match measurement.source {
-                DataSource::Measured => "MEASURED",
-                DataSource::Calculated => "CALCULATED",
-                DataSource::Simulated => "SIMULATED",
-            });
+            crate::design::source(ui, measurement.source);
             ui.small(format!("UTC {}", measurement.timestamp.to_rfc3339()));
             egui::Grid::new("cache_counters_grid")
                 .striped(true)
@@ -191,7 +183,7 @@ mod tests {
                     shared_logical_processors: vec![0, 1],
                 }],
             },
-            source: DataSource::Measured,
+            source: u_monitor_core::DataSource::Measured,
             timestamp: UNIX_EPOCH.into(),
         });
         let mut counters = PlatformResult::Unavailable("not sampled".into());

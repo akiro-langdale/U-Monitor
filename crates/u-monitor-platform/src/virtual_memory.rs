@@ -1,34 +1,23 @@
-//! Current-process virtual memory map and bounded read-only samples.
-#[cfg(windows)]
-mod windows;
+//! Process virtual memory map and bounded read-only samples via U-Library.
 
-#[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(target_os = "macos")]
-mod macos;
-
-// Parsed on all targets so unit tests cover Linux maps format under Windows CI.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-mod maps_parse;
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+mod library;
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+pub use library::ProcessMemory;
 
 use u_monitor_core::{MemoryBytes, MemoryReadRequest, PlatformResult, VirtualMemoryRegion};
 
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+pub use u_library_memory::process_memory::MAX_MEMORY_SAMPLE_BYTES;
+
 /// Hard cap for one inspector read. Keeps UI snapshots small and avoids huge copies.
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub const MAX_MEMORY_SAMPLE_BYTES: usize = 512;
 
 pub(crate) fn discover_regions() -> PlatformResult<Vec<VirtualMemoryRegion>> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     {
-        windows::enumerate_regions()
-    }
-    #[cfg(target_os = "linux")]
-    {
-        linux::enumerate_regions()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        macos::enumerate_regions()
+        library::enumerate_regions()
     }
     #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
@@ -39,17 +28,9 @@ pub(crate) fn discover_regions() -> PlatformResult<Vec<VirtualMemoryRegion>> {
 }
 
 pub(crate) fn read_bytes(request: MemoryReadRequest) -> PlatformResult<MemoryBytes> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     {
-        windows::read_bytes(request)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        linux::read_bytes(request)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        macos::read_bytes(request)
+        library::read_bytes(request)
     }
     #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {

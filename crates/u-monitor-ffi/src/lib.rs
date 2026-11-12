@@ -60,6 +60,6 @@ mod tests {
     #[test]
     fn version_is_nul_terminated_static() {
         let version = unsafe { CStr::from_ptr(um_version()) };
-        assert_eq!(version.to_str().unwrap(), "0.1.0");
+        assert_eq!(version.to_str().unwrap(), env!("CARGO_PKG_VERSION"));
     }
 }
