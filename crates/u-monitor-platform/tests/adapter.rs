@@ -9,8 +9,12 @@ fn stub_reports_no_implemented_hardware_features() {
     for feature in [
         PlatformFeature::CpuMetrics,
         PlatformFeature::RamMetrics,
+        PlatformFeature::VirtualMemoryMap,
+        PlatformFeature::MemoryBytes,
         PlatformFeature::DiskStorage,
         PlatformFeature::HardwareRegisters,
+        PlatformFeature::CurrentThreadRegisters,
+        PlatformFeature::CacheTopology,
     ] {
         assert_eq!(
             adapter.check_availability(feature),

@@ -1,5 +1,29 @@
 //! Shared contracts independent of the UI and native operating-system adapters.
 
+mod cache;
+mod cpu;
+mod memory;
+mod process;
+mod ram;
+mod registers;
+mod storage;
+mod system;
+
+pub use cache::{CacheCounters, CacheKind, CacheNode, CacheTopology};
+pub use cpu::{CpuInfo, CpuMetrics, CpuUsagePercent, LogicalCpuUsage};
+pub use memory::{
+    MemoryBytes, MemoryProtection, MemoryReadRequest, MemoryRegionKind, MemoryState,
+    VirtualMemoryRegion,
+};
+pub use process::{InspectionTarget, ProcessId, ProcessInfo, ThreadId, ThreadInfo};
+pub use ram::RamInfo;
+pub use registers::{RegisterArchitecture, RegisterSnapshot, RegisterValue};
+pub use storage::{
+    DiskIoRates, FileBytes, FileReadRequest, StorageKind, StorageVolume, VolumeSpace,
+};
+
+pub use system::{Architecture, OperatingSystem, SystemIdentity};
+
 use chrono::{DateTime, Utc};
 use std::fmt;
 use thiserror::Error;
@@ -104,14 +128,164 @@ impl<T> PlatformResult<T> {
 /// Per enumeration of platform subsystems or functions, the availability of which can be checked
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformFeature {
+    SystemIdentity,
+    CpuDiscovery,
     CpuMetrics,
     RamMetrics,
+    VirtualMemoryMap,
+    MemoryBytes,
+    StorageDiscovery,
     DiskStorage,
     HardwareRegisters,
+    CurrentThreadRegisters,
+    CacheTopology,
+    ProcessEnumeration,
+    ThreadEnumeration,
+    ForeignProcessMemory,
+    ForeignThreadRegisters,
+    CacheCounters,
+}
+
+impl PlatformFeature {
+    /// Stable order for capability matrices and overview UI.
+    pub const ALL: [Self; 16] = [
+        Self::SystemIdentity,
+        Self::CpuDiscovery,
+        Self::CpuMetrics,
+        Self::RamMetrics,
+        Self::VirtualMemoryMap,
+        Self::MemoryBytes,
+        Self::StorageDiscovery,
+        Self::DiskStorage,
+        Self::HardwareRegisters,
+        Self::CurrentThreadRegisters,
+        Self::CacheTopology,
+        Self::ProcessEnumeration,
+        Self::ThreadEnumeration,
+        Self::ForeignProcessMemory,
+        Self::ForeignThreadRegisters,
+        Self::CacheCounters,
+    ];
+}
+
+impl fmt::Display for PlatformFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::SystemIdentity => "SystemIdentity",
+            Self::CpuDiscovery => "CpuDiscovery",
+            Self::CpuMetrics => "CpuMetrics",
+            Self::RamMetrics => "RamMetrics",
+            Self::VirtualMemoryMap => "VirtualMemoryMap",
+            Self::MemoryBytes => "MemoryBytes",
+            Self::StorageDiscovery => "StorageDiscovery",
+            Self::DiskStorage => "DiskStorage",
+            Self::HardwareRegisters => "HardwareRegisters",
+            Self::CurrentThreadRegisters => "CurrentThreadRegisters",
+            Self::CacheTopology => "CacheTopology",
+            Self::ProcessEnumeration => "ProcessEnumeration",
+            Self::ThreadEnumeration => "ThreadEnumeration",
+            Self::ForeignProcessMemory => "ForeignProcessMemory",
+            Self::ForeignThreadRegisters => "ForeignThreadRegisters",
+            Self::CacheCounters => "CacheCounters",
+        })
+    }
 }
 
 /// The contract for platform-dependent adapters
 pub trait PlatformAdapter {
+    /// Samples CPU utilization while retaining backend counters between calls.
+    /// First/too-early attempts may be Unavailable. Must not sleep to warm up.
+    fn cpu_metrics(&mut self) -> PlatformResult<CpuMetrics> {
+        PlatformResult::NotImplemented("CPU utilization is not implemented".into())
+    }
+
+    /// Enumerates mounted volumes visible to the backend, not all physical disks.
+    fn storage_volumes(&self) -> PlatformResult<Vec<StorageVolume>> {
+        PlatformResult::NotImplemented("Mounted-volume discovery is not implemented".into())
+    }
+
+    /// Samples host disk read/write throughput from cumulative counters.
+    /// First/too-early attempts may be Unavailable. Must not sleep to warm up.
+    fn disk_io_rates(&mut self) -> PlatformResult<DiskIoRates> {
+        PlatformResult::NotImplemented("Disk I/O rate sampling is not implemented".into())
+    }
+
+    /// Reads a bounded sample from a user-selected regular file. Read-only; no raw device write.
+    fn read_file_bytes(&self, request: FileReadRequest) -> PlatformResult<FileBytes> {
+        let _ = request;
+        PlatformResult::NotImplemented("File hex sampling is not implemented".into())
+    }
+
+    /// Returns one RAM statistics snapshot without reading physical memory bytes.
+    fn ram_info(&self) -> PlatformResult<RamInfo> {
+        PlatformResult::NotImplemented("RAM statistics are not implemented".into())
+    }
+
+    /// Enumerates virtual regions of the current process only.
+    /// This is not a physical RAM dump and does not inspect other processes.
+    fn virtual_memory_regions(&self) -> PlatformResult<Vec<VirtualMemoryRegion>> {
+        PlatformResult::NotImplemented("Virtual memory map is not implemented".into())
+    }
+
+    /// Reads a bounded byte sample from the current process when protection allows.
+    /// Never writes memory. Foreign-process reads remain unimplemented.
+    fn read_current_process_bytes(
+        &self,
+        request: MemoryReadRequest,
+    ) -> PlatformResult<MemoryBytes> {
+        let _ = request;
+        PlatformResult::NotImplemented("Current-process memory reads are not implemented".into())
+    }
+
+    /// Captures general-purpose registers of the calling thread only.
+    /// Other threads usually require debug permissions and are not covered here.
+    fn current_thread_registers(&self) -> PlatformResult<RegisterSnapshot> {
+        PlatformResult::NotImplemented("Current-thread register capture is not implemented".into())
+    }
+
+    /// Discovers cache hierarchy metadata (sizes, levels, sharing). Never cache contents.
+    fn cache_topology(&self) -> PlatformResult<CacheTopology> {
+        PlatformResult::NotImplemented("Cache topology discovery is not implemented".into())
+    }
+
+    /// Samples hardware cache references/misses when the OS exposes PMC/perf access.
+    /// Never invents zeros or fills from the educational simulation.
+    fn cache_counters(&self) -> PlatformResult<CacheCounters> {
+        PlatformResult::NotImplemented("Hardware cache counters are not implemented".into())
+    }
+
+    /// Lists OS-visible processes. Does not open handles for foreign memory reads.
+    fn list_processes(&self) -> PlatformResult<Vec<ProcessInfo>> {
+        PlatformResult::NotImplemented("Process enumeration is not implemented".into())
+    }
+
+    /// Lists threads of one process when the OS exposes them to this user.
+    fn list_threads(&self, process_id: ProcessId) -> PlatformResult<Vec<ThreadInfo>> {
+        let _ = process_id;
+        PlatformResult::NotImplemented("Thread enumeration is not implemented".into())
+    }
+
+    /// Captures registers of a specific thread after explicit user consent.
+    /// Without consent the UI must not call this. Access denied → PermissionRequired.
+    fn thread_registers(
+        &self,
+        process_id: ProcessId,
+        thread_id: ThreadId,
+    ) -> PlatformResult<RegisterSnapshot> {
+        let _ = (process_id, thread_id);
+        PlatformResult::NotImplemented("Other-thread register capture is not implemented".into())
+    }
+
+    /// Discovers OS-reported CPU models and topology without sampling CPU load.
+    fn cpu_info(&self) -> PlatformResult<CpuInfo> {
+        PlatformResult::NotImplemented("CPU discovery is not implemented".into())
+    }
+
+    /// Returns build-target metadata, not physical hardware characteristics.
+    fn system_identity(&self) -> PlatformResult<SystemIdentity> {
+        PlatformResult::NotImplemented("System identification is not implemented".into())
+    }
+
     /// Returns the name of the current adapter (for example, "Linux Native", "Windows API")
     fn name(&self) -> &'static str;
 

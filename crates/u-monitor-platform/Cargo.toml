@@ -2,6 +2,36 @@
 name = "u-monitor-platform"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
 
 [dependencies]
+u-library-core = { path = "../../../U-Library/crates/u-library-core" }
+u-library-memory = { path = "../../../U-Library/crates/u-library-memory" }
+u-library-registers = { path = "../../../U-Library/crates/u-library-registers" }
+u-library-cache = { path = "../../../U-Library/crates/u-library-cache" }
 u-monitor-core = { path = "../u-monitor-core" }
+sysinfo = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Wdk_System_SystemInformation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Memory",
+    "Win32_System_Power",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+mach2 = "0.4"

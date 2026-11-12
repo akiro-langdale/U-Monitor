@@ -2,9 +2,16 @@
 name = "u-monitor-ffi"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Stable C ABI for U-Monitor platform and simulation APIs"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+name = "u_monitor"
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [dependencies]
 u-monitor-core = { path = "../u-monitor-core" }
+u-monitor-platform = { path = "../u-monitor-platform" }
+u-monitor-simulation = { path = "../u-monitor-simulation" }
